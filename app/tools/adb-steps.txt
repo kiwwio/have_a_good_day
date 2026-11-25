@@ -1,0 +1,14 @@
+install -r ..\have-a-good-day-v3.0-debug.apk
+shell am force-stop tw.edu.nycu.haveagoodday
+shell input keyevent KEYCODE_HOME
+sleep 1
+shell monkey -p tw.edu.nycu.haveagoodday -c android.intent.category.LAUNCHER 1
+sleep 0
+shot s13
+sleep 5
+shell input keyevent KEYCODE_HOME
+sleep 1
+shell input swipe 540 2000 540 600 300
+sleep 2
+shot s14
+shell input keyevent KEYCODE_HOME

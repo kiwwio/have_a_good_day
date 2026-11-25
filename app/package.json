@@ -1,0 +1,20 @@
+{
+  "name": "have-a-good-day",
+  "version": "3.0.0",
+  "private": true,
+  "description": "好日子行事曆：給長輩用的大字行事曆（iOS／Android App）",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap open android",
+    "ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/local-notifications": "^8.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}

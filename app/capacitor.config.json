@@ -1,0 +1,11 @@
+{
+  "appId": "tw.edu.nycu.haveagoodday",
+  "appName": "好日子行事曆",
+  "webDir": "www",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#B5472E"
+    }
+  }
+}

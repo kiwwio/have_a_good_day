@@ -1,9 +1,12 @@
-/* 好日子行事曆 v2.1 — 網頁 App（PWA）主程式
-   階段一：可加到手機桌面、離線可開、分享直接開 LINE。
-   提醒：打開 App 時依時間自動跳出（週日預告、前一天、出門前）；關閉 App 時的系統通知留待階段二（手機 App）。 */
+/* 好日子行事曆 v3.0 — 主程式（網頁 App 與 iOS／Android App 共用）
+   網頁版：可加到手機桌面、離線可開；提醒在打開 App 時跳出。
+   手機 App 版（Capacitor）：用手機本機排程通知，App 關著也會準時提醒（見「手機本機通知」一節）。 */
 (function(){
 'use strict';
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v3.0';
+// 在 iOS／Android App 裡執行時為 true（Capacitor 原生殼）
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const LN = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.LocalNotifications : null;
 const WD = ['日','一','二','三','四','五','六'];
 const TYPES = {
   book:  {name:'讀書會', icon:'📖', color:'c-blue'},
@@ -50,7 +53,7 @@ let S = { events: seed(), sample:true, settings:{sunday:true, sundayHour:20, day
 const saved = load(STORE_KEY, null);
 if (saved) { S = Object.assign(S, saved); S.settings = Object.assign({}, S.settings, saved.settings||{}); }
 if (S.settings.fontLevel == null) S.settings.fontLevel = S.settings.bigFont ? 1 : 0;
-const save = () => store(STORE_KEY, S);
+const save = () => { store(STORE_KEY, S); scheduleNative(); };
 
 let view = 'week', weekOffset = 0, monthCursor = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), selDay = new Date(TODAY);
 let draft = null;
@@ -80,7 +83,7 @@ function nextOccurrence(e){
 
 // ---------- 安裝到手機桌面 ----------
 let installPrompt = null;
-const isStandalone = () => mq('(display-mode: standalone)') || window.navigator.standalone === true;
+const isStandalone = () => NATIVE || mq('(display-mode: standalone)') || window.navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints > 1);
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; if (view==='week'||view==='settings') render(); });
 window.addEventListener('appinstalled', () => { installPrompt = null; toast('已放到手機桌面！'); render(); });
@@ -213,11 +216,11 @@ function renderSettings(){
   const hourName = h => h<12?'上午 '+h:h===12?'中午 12':'晚上 '+(h-12);
   return `
   <h2 class="sec">提醒設定</h2>
-  <div class="notice warn"><b>目前是測試版</b><p>提醒會在你<b style="display:inline;color:inherit">打開 App 時</b>出現。之後的手機 App 版本，App 關著也會自動跳出提醒。</p></div>
-  <div class="setrow"><div class="lbl"><b>週日預告下週行程</b><span>每週日 ${hourName(s.sundayHour)} 點以後，打開就看到下週活動</span></div>${sw('s-sunday',s.sunday)}</div>
+  ${NATIVE ? permNoticeHTML() : `<div class="notice warn"><b>目前是網頁版</b><p>提醒會在你<b style="display:inline;color:inherit">打開 App 時</b>出現。手機 App 版本，App 關著也會自動跳出提醒。</p></div>`}
+  <div class="setrow"><div class="lbl"><b>週日預告下週行程</b><span>${NATIVE ? `每週日 ${hourName(s.sundayHour)} 點，手機會跳出下週活動` : `每週日 ${hourName(s.sundayHour)} 點以後，打開就看到下週活動`}</span></div>${sw('s-sunday',s.sunday)}</div>
   ${s.sunday?`<div class="step"><h3>預告時間（週日）</h3><div class="choices">${[18,19,20,21,9,12].map(h=>`<button class="choice" data-sh="${h}" aria-pressed="${s.sundayHour===h}">${hourName(h)} 點</button>`).join('')}</div></div>`:''}
-  <div class="setrow"><div class="lbl"><b>活動前一天提醒</b><span>前一天晚上 6 點以後，提醒明天要做什麼</span></div>${sw('s-daybefore',s.dayBefore)}</div>
-  <div class="setrow"><div class="lbl"><b>出門前提醒</b><span>活動開始前 1 個半小時內，提醒準備出門</span></div>${sw('s-hour',s.hourBefore)}</div>
+  <div class="setrow"><div class="lbl"><b>活動前一天提醒</b><span>${NATIVE ? '前一天晚上 8 點，提醒明天要做什麼' : '前一天晚上 6 點以後，提醒明天要做什麼'}</span></div>${sw('s-daybefore',s.dayBefore)}</div>
+  <div class="setrow"><div class="lbl"><b>出門前提醒</b><span>${NATIVE ? '活動開始前 1 小時，提醒準備出門' : '活動開始前 1 個半小時內，提醒準備出門'}</span></div>${sw('s-hour',s.hourBefore)}</div>
   <h2 class="sec">看得清楚</h2>
   <div class="step"><h3>字的大小</h3><div class="choices">${FONT_LEVELS.map((f,i)=>`<button class="choice" data-fl="${i}" aria-pressed="${s.fontLevel===i}"><span style="font-size:${1+i*.25}em;line-height:1.1" aria-hidden="true">字</span>${f.name}</button>`).join('')}</div></div>
   <div class="setrow"><div class="lbl"><b>高對比顏色</b><span>白底黑字、粗黑框，看不清楚時打開</span></div>${sw('s-contrast',!!s.highContrast)}</div>
@@ -226,7 +229,7 @@ function renderSettings(){
   <div class="btnrow"><button class="secondary" id="try-sunday">🔔 週日的「下週預告」</button><button class="secondary" id="try-day">🔔 前一天的提醒</button></div>
   <h2 class="sec">資料</h2>
   <div class="btnrow"><button class="secondary" id="clear-ask">清空所有行程</button><button class="secondary" id="reset-ask">換回範例行程</button></div>
-  <p class="about">好日子行事曆 ${APP_VERSION}・行程只存在這支手機裡</p>`;
+  <p class="about">好日子行事曆 ${APP_VERSION}${NATIVE ? '（手機 App）' : ''}・行程只存在這支手機裡</p>`;
 }
 
 // ---------- 彈出視窗與提示 ----------
@@ -325,6 +328,114 @@ function autoRemind(){
   if (s.dayBefore && now.getHours() >= 18 && eventsOn(addDays(TODAY,1)).length && shown.day !== today){ mark('day'); return notify('day'); }
 }
 
+// ---------- 手機本機通知（只在 iOS／Android App 裡運作） ----------
+// 規則（手機版發布規劃 v1.0 §2.1）：每次改行程或改設定就全部清掉重排。
+// 不用「每週重複」通知，而是展開成未來 21 天的每一次，才能正確略過「這次不去」；
+// 每次打開 App 也會重排，讓排程一直往後滾動。iOS 同時最多 64 則，只排最近的 60 則。
+const NOTIF_DAYS = 21, NOTIF_MAX = 60;
+let notifPerm = 'unknown';   // granted / denied / prompt / unknown
+let exactOK = false;         // Android 能否排準時鬧鐘（App 已宣告 USE_EXACT_ALARM，通常為 true）
+function buildNotifications(){
+  const s = S.settings, now = Date.now(), list = [];
+  const at = (d, h, m) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m || 0);
+  const add = (when, title, body, extra) => { if (+when > now + 30000) list.push({when, title, body, extra}); };
+  for (let i = 0; i <= NOTIF_DAYS; i++){
+    const d = addDays(TODAY, i), evs = eventsOn(d);
+    if (s.hourBefore) evs.forEach(e => {
+      const [h, m] = e.time.split(':').map(Number);
+      add(new Date(+at(d, h, m) - 3600e3), `再過 1 小時要去${titleOf(e)}`,
+        `${fmtTime(e.time)}${e.place ? '，在' + e.place : ''}，記得準備出門喔。`, {kind:'day', date:ymd(d)});
+    });
+    if (s.dayBefore && evs.length){
+      const e = evs[0];
+      add(at(addDays(d, -1), 20), `明天（週${WD[d.getDay()]}）要${titleOf(e)}`,
+        `${fmtTime(e.time)}${e.place ? '，在' + e.place : ''}${evs.length > 1 ? `，另外還有 ${evs.length - 1} 個活動` : ''}`, {kind:'day', date:ymd(d)});
+    }
+    if (s.sunday && d.getDay() === 0){
+      const start = addDays(d, 1); let total = 0; const parts = [];
+      for (let k = 0; k < 7; k++){
+        const x = addDays(start, k), ev2 = eventsOn(x);
+        if (ev2.length){ total += ev2.length; parts.push('週' + WD[x.getDay()] + ev2.map(titleOf).join('、')); }
+      }
+      add(at(d, s.sundayHour), '下週行程預告', total ? `下週有 ${total} 個活動：${parts.join('，')}` : '下週沒有活動，好好休息。', {kind:'sunday', date:ymd(d)});
+    }
+  }
+  return list.sort((a, b) => a.when - b.when).slice(0, NOTIF_MAX)
+    .map((n, i) => ({id: i + 1, title: n.title, body: n.body, largeBody: n.body,
+      schedule: {at: n.when, allowWhileIdle: true}, extra: n.extra,
+      // 能準時才要求準時；不能準時就用一般排程（可能晚到），避免外掛跳出英文的系統設定頁
+      isExactNotification: exactOK}));
+}
+let schedTimer = null;
+function scheduleNative(){
+  if (!LN) return;
+  clearTimeout(schedTimer);   // 連續修改時只排最後一次
+  schedTimer = setTimeout(async () => {
+    try {
+      const pend = await LN.getPending();
+      if (pend.notifications && pend.notifications.length) await LN.cancel({notifications: pend.notifications.map(n => ({id: n.id}))});
+      if (notifPerm !== 'granted') return;
+      try { const ex = await LN.checkExactNotificationSetting(); exactOK = ex.exact_alarm === 'granted'; } catch(e){ exactOK = true; /* iOS 沒有這項限制 */ }
+      const list = buildNotifications();
+      if (list.length) await LN.schedule({notifications: list});
+    } catch(e){ console.warn('排通知失敗', e); }
+  }, 300);
+}
+function permNoticeHTML(){
+  if (notifPerm === 'granted') return `<div class="notice"><b>✅ 提醒已開啟</b><p>App 關著也會準時跳出提醒。</p></div>`;
+  if (notifPerm === 'denied') return `<div class="notice warn"><b>⚠️ 手機的通知被關掉了</b><p>好日子沒辦法提醒你。請到手機的「設定」→「應用程式」→「好日子行事曆」→「通知」，把它打開。</p><button class="secondary" id="perm-recheck">我打開了，再檢查一次</button></div>`;
+  return `<div class="notice warn"><b>還沒開啟提醒</b><p>要讓手機在活動前提醒你，需要你同意。</p><button class="primary" id="perm-ask">開啟提醒</button></div>`;
+}
+// 第一次：先用大字說明為什麼要通知，再跳出系統的詢問
+function permExplain(){
+  sheet(`<h3>讓好日子提醒你</h3><p class="sub">活動前一天晚上、出門前 1 小時，手機會「叮」一聲跳出提醒，App 關著也會。</p>
+    <p class="sub">等一下手機會問你「是否允許通知」，請按 <b>允許</b>。</p>
+    <div class="btnrow"><button class="primary" id="perm-go">好，開啟提醒</button><button class="secondary" id="sheet-close">以後再說</button></div>`);
+}
+async function refreshPerm(){
+  if (!LN) return;
+  try { const r = await LN.checkPermissions(); notifPerm = r.display === 'granted' ? 'granted' : r.display === 'denied' ? 'denied' : 'prompt'; }
+  catch(e){ notifPerm = 'unknown'; }
+}
+async function askPerm(){
+  try { const r = await LN.requestPermissions(); notifPerm = r.display === 'granted' ? 'granted' : 'denied'; } catch(e){}
+  closeSheet(); scheduleNative(); render();
+  toast(notifPerm === 'granted' ? '提醒開好了！' : '沒有開啟提醒，之後可以在「提醒」頁再開');
+}
+// 試試看：5 秒後跳出一則真的系統通知，家人可以用來確認長輩手機收得到
+async function testNotify(kind){
+  if (notifPerm !== 'granted'){ permExplain(); return; }
+  let title, body, extra;
+  if (kind === 'sunday'){ const p = nextWeekPreview(); title = '下週行程預告（試試看）';
+    body = p.total ? `下週有 ${p.total} 個活動` : '下週沒有活動，好好休息。'; extra = {kind:'sunday'}; }
+  else { const n = nextEventDay(1); const d = n ? n[0] : addDays(TODAY,1), e = n && n[1][0];
+    title = e ? `明天要${titleOf(e)}（試試看）` : '好日子提醒（試試看）';
+    body = e ? `${fmtTime(e.time)}${e.place ? '，在' + e.place : ''}` : '這是測試提醒'; extra = {kind:'day', date: ymd(d)}; }
+  try { await LN.schedule({notifications: [{id: 900, title, body, largeBody: body, extra,
+    schedule: {at: new Date(Date.now() + 5000), allowWhileIdle: true}, isExactNotification: exactOK}]});
+    toast('5 秒後手機會跳出提醒，可以先回到手機桌面看看');
+  } catch(e){ toast('提醒沒有排成功，請檢查通知是否打開'); }
+}
+async function initNative(){
+  if (!LN) return;
+  await refreshPerm();
+  if (notifPerm === 'prompt' && !load('elder-cal-perm-asked', false)){ store('elder-cal-perm-asked', true); permExplain(); }
+  scheduleNative();
+  if (view === 'settings') render();
+  // 點通知：預告 → 下週清單；其他 → 那一天
+  LN.addListener('localNotificationActionPerformed', a => {
+    const x = (a && a.notification && a.notification.extra) || {};
+    if (x.kind === 'sunday'){ weekOffset = 1; view = 'week'; render(); showWeekPreview(); }
+    else if (x.date){ selDay = parseYmd(x.date); monthCursor = new Date(selDay.getFullYear(), selDay.getMonth(), 1); view = 'month'; closeSheet(); render(); }
+  });
+  // 從背景回來時重新檢查權限（長輩可能剛去設定打開）
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+    const before = notifPerm; await refreshPerm();
+    if (before !== notifPerm){ scheduleNative(); render(); }
+  });
+}
+
 // ---------- 操作 ----------
 document.addEventListener('click', ev => {
   const t = ev.target;
@@ -414,8 +525,10 @@ document.addEventListener('click', ev => {
   if (b.dataset.fl){ S.settings.fontLevel = +b.dataset.fl; save(); render(); return; }
   if (map[id]){ S.settings[map[id]] = !S.settings[map[id]]; save(); render(); return; }
   if (b.dataset.sh){ S.settings.sundayHour = +b.dataset.sh; save(); render(); return; }
-  if (id==='try-sunday'){ notify('sunday'); return; }
-  if (id==='try-day'){ notify('day'); return; }
+  if (id==='perm-ask'||id==='perm-go'){ askPerm(); return; }
+  if (id==='perm-recheck'){ refreshPerm().then(() => { scheduleNative(); render(); toast(notifPerm==='granted' ? '提醒開好了！' : '通知還是關著的'); }); return; }
+  if (id==='try-sunday'){ if (LN) testNotify('sunday'); else notify('sunday'); return; }
+  if (id==='try-day'){ if (LN) testNotify('day'); else notify('day'); return; }
   // 提醒橫幅
   if (id==='bn-close'){ $('#banner').classList.remove('show'); return; }
   if (id==='bn-open'){ const bn=$('#banner'); bn.classList.remove('show');
@@ -434,10 +547,11 @@ document.addEventListener('keydown', e => { if (e.key==='Escape') { closeSheet()
 document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible'){ const n=new Date(); n.setHours(0,0,0,0); if (+n !== +TODAY) location.reload(); } });
 
 render();
-setTimeout(autoRemind, 800);
+// 手機 App 版：提醒交給手機本機通知，打開時不再跳出網頁版的提醒橫幅
+if (NATIVE) initNative(); else setTimeout(autoRemind, 800);
 
 // 離線快取
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+if (!NATIVE && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
 }
 })();

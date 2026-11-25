@@ -1,8 +1,13 @@
-# 好日子行事曆 v2.1（網頁 App）
+# 好日子行事曆 v3.0（網頁 App＋手機 App）
 
 目前網址：https://kiwwio.github.io/have_a_good_day/
 
 給長輩用的大字行事曆，可加到手機桌面、沒網路也能打開。
+
+- **網頁版**：本資料夾最外層的檔案，由 GitHub Pages 發布到上面的網址。
+- **手機 App（Android／iOS）**：`app/` 資料夾，用 Capacitor 把同一份網頁程式包成 App，改用手機本機通知（App 關著也會準時提醒）。建置與測試方法見 [`app/README.md`](app/README.md)。
+
+> 網頁程式有兩份：最外層（網站用）與 `app/www/`（手機 App 用），內容相同。改了網頁程式要兩邊一起更新。
 
 ## 檔案
 
@@ -15,6 +20,7 @@
 | `sw.js` | 離線快取。**改版時要把裡面的 `VERSION` 改掉**，長輩手機上的舊版才會更新 |
 | `install.html` | 「放到手機桌面」圖解（安卓／iPhone） |
 | `icons/` | App 圖示 |
+| `app/` | 手機 App 專案（Capacitor：`android/`、`ios/`、`www/`、建置腳本 `tools/`） |
 
 ## 在自己電腦上試
 
@@ -40,7 +46,7 @@ python -m http.server 8766
 
 ## 之後改版
 
-1. 修改檔案。
-2. 把 `sw.js` 的 `VERSION` 和 `app.js` 的 `APP_VERSION` 改成新版號（例如 `v2.1`）。
-3. 依專案版次規則另存一份新資料夾（例如 `好日子行事曆_app_v2.1`），再上傳到 GitHub 覆蓋舊檔。
+1. 修改檔案（網頁程式記得同步到 `app/www/`）。
+2. 把 `sw.js` 的 `VERSION` 和 `app.js` 的 `APP_VERSION` 改成新版號（例如 `v3.1`）。
+3. 依專案版次規則另存一份新資料夾（例如 `好日子行事曆_app_v3.1`），再用 git 提交、打版本標籤並推送。
 4. 長輩下次打開 App 時會在背景下載新版，再下一次打開就是新版。
