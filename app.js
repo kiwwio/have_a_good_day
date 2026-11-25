@@ -1,0 +1,386 @@
+/* 好日子行事曆 v2.0 — 網頁 App（PWA）主程式
+   階段一：可加到手機桌面、離線可開、分享直接開 LINE。
+   提醒：打開 App 時依時間自動跳出（週日預告、前一天、出門前）；關閉 App 時的系統通知留待階段二（手機 App）。 */
+(function(){
+'use strict';
+const APP_VERSION = 'v2.0';
+const WD = ['日','一','二','三','四','五','六'];
+const TYPES = {
+  book:  {name:'讀書會', icon:'📖', color:'c-blue'},
+  dance: {name:'跳舞',   icon:'💃', color:'c-red'},
+  sing:  {name:'唱歌',   icon:'🎤', color:'c-orange'},
+  doctor:{name:'看醫生', icon:'🏥', color:'c-green'},
+  family:{name:'家人聚會',icon:'👨‍👩‍👧', color:'c-pink'},
+  other: {name:'其他',   icon:'📌', color:'c-gray'}
+};
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const startOfWeek = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - (x.getDay()+6)%7); return x; };
+const md = d => (d.getMonth()+1)+'/'+d.getDate();
+const parseYmd = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); };
+function fmtTime(t){
+  const [h,m] = t.split(':').map(Number);
+  const part = h < 12 ? '上午' : h < 18 ? '下午' : '晚上';
+  const hh = h > 12 ? h-12 : (h===0?12:h);
+  return part+' '+hh+(m ? ':'+pad(m) : ' 點');
+}
+
+// ---------- 資料 ----------
+const STORE_KEY = 'elder-cal-v1', SHOWN_KEY = 'elder-cal-shown', INSTALL_KEY = 'elder-cal-install-hint';
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+function seed(){
+  const nextWeek = startOfWeek(addDays(TODAY,7));
+  return [
+    {id:1, type:'book',  repeat:true, weekday:3, time:'09:30', place:'社區活動中心 2 樓'},
+    {id:2, type:'dance', repeat:true, weekday:4, time:'19:00', place:'河濱公園'},
+    {id:3, type:'sing',  repeat:true, weekday:5, time:'14:00', place:'里民卡拉OK教室'},
+    {id:4, type:'dance', repeat:true, weekday:0, time:'07:00', place:'河濱公園'},
+    {id:5, type:'doctor',repeat:false, date:ymd(addDays(nextWeek,1)), time:'10:00', place:'家醫科回診（帶健保卡）'},
+    {id:6, type:'family',repeat:false, date:ymd(addDays(nextWeek,5)), time:'18:00', place:'孫子生日聚餐'}
+  ];
+}
+const FONT_LEVELS = [{name:'標準', fs:'1.25rem'}, {name:'大', fs:'1.5rem'}, {name:'特大', fs:'1.75rem'}];
+const mq = q => { try { return matchMedia(q).matches; } catch(e){ return false; } };
+const load = (k, def) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch(e){ return def; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+
+// 第一次打開時跟隨手機設定：系統要求高對比 → 預設開高對比
+let S = { events: seed(), sample:true, settings:{sunday:true, sundayHour:20, dayBefore:true, hourBefore:true, fontLevel:0, highContrast: mq('(prefers-contrast: more)')} };
+const saved = load(STORE_KEY, null);
+if (saved) { S = Object.assign(S, saved); S.settings = Object.assign({}, S.settings, saved.settings||{}); }
+if (S.settings.fontLevel == null) S.settings.fontLevel = S.settings.bigFont ? 1 : 0;
+const save = () => store(STORE_KEY, S);
+
+let view = 'week', weekOffset = 0, monthCursor = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), selDay = new Date(TODAY);
+let draft = null;
+
+const titleOf = e => e.type==='other' && e.title ? e.title : TYPES[e.type].name;
+function eventsOn(d){
+  const key = ymd(d), wd = d.getDay();
+  return S.events.filter(e => e.repeat ? e.weekday===wd : e.date===key).sort((a,b)=>a.time.localeCompare(b.time));
+}
+
+// ---------- 安裝到手機桌面 ----------
+let installPrompt = null;
+const isStandalone = () => mq('(display-mode: standalone)') || window.navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints > 1);
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; if (view==='week'||view==='settings') render(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; toast('已放到手機桌面！'); render(); });
+async function doInstall(){
+  if (installPrompt){ installPrompt.prompt(); try { await installPrompt.userChoice; } catch(e){} installPrompt = null; render(); }
+  else location.href = './install.html' + (isIOS() ? '#iphone' : '#android');
+}
+
+// ---------- 畫面 ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function evHTML(e, d){
+  const t = TYPES[e.type];
+  return `<button class="ev ${t.color}" data-ev="${e.id}" data-date="${ymd(d)}">
+    <span class="ic" aria-hidden="true">${t.icon}</span>
+    <span class="tx"><span class="tt">${esc(titleOf(e))}</span>${e.repeat?'<span class="rep">每週</span>':''}
+    <span class="meta">${fmtTime(e.time)}${e.place?' · '+esc(e.place):''}</span></span></button>`;
+}
+function weekHTML(offset){
+  const start = startOfWeek(addDays(TODAY, offset*7));
+  let h = '<div class="daylist">';
+  for (let i=0;i<7;i++){
+    const d = addDays(start,i), evs = eventsOn(d);
+    const isToday = +d === +TODAY, past = d < TODAY;
+    h += `<div class="day ${isToday?'is-today':''} ${past?'is-past':''} ${(d.getDay()%6===0)?'weekend':''}">
+      <div class="wd"><b>週${WD[d.getDay()]}</b><span>${md(d)}</span>${isToday?'<span class="tag">今天</span>':past?'<span class="tag past">已過</span>':''}</div>
+      <div class="evs">${evs.length ? evs.map(e=>evHTML(e,d)).join('') : '<div class="none">沒有活動，好好休息</div>'}</div></div>`;
+  }
+  return h + '</div>';
+}
+
+function render(){
+  document.documentElement.style.setProperty('--fs', FONT_LEVELS[S.settings.fontLevel].fs);
+  if (S.settings.highContrast) document.documentElement.dataset.contrast = 'high'; else delete document.documentElement.dataset.contrast;
+  document.querySelectorAll('.nav button').forEach(b => { if (b.dataset.view===view) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  const sc = $('#screen');
+  if (view==='week') sc.innerHTML = renderWeek();
+  else if (view==='month') sc.innerHTML = renderMonth();
+  else if (view==='add') sc.innerHTML = renderAdd();
+  else sc.innerHTML = renderSettings();
+  window.scrollTo(0,0);
+}
+
+function installHintHTML(){
+  if (isStandalone() || load(INSTALL_KEY, false)) return '';
+  return `<div class="notice"><b>📲 把好日子放到手機桌面</b><p>以後在桌面點一下就能打開，不用再找網址。</p>
+    <div class="row"><button class="secondary" id="install">怎麼放？</button><button class="secondary" id="install-later">先不用</button></div></div>`;
+}
+function sampleHintHTML(){
+  if (!S.sample) return '';
+  return `<div class="notice warn"><b>現在看到的是範例行程</b><p>可以先試著點點看。要開始記自己的行程時，按「清空重來」。</p>
+    <div class="row"><button class="secondary" id="clear-ask">清空重來</button><button class="secondary" id="keep-sample">保留範例</button></div></div>`;
+}
+
+function renderWeek(){
+  const todays = eventsOn(TODAY);
+  const start = startOfWeek(addDays(TODAY, weekOffset*7));
+  return `
+  ${installHintHTML()}
+  <div class="today-head">
+    <div class="tearsheet"><div class="m">${TODAY.getMonth()+1} 月</div><div class="d">${TODAY.getDate()}</div><div class="w">星期${WD[TODAY.getDay()]}</div></div>
+    <div><h1>${todays.length ? '今天有 '+todays.length+' 個活動' : '今天沒有活動'}</h1>
+    <p>${todays.length ? '別忘了出門時間喔' : '可以在家休息，或按「新增」記下行程'}</p></div>
+  </div>
+  ${todays.length ? '<div class="todaycard">'+todays.map(e=>evHTML(e,TODAY)).join('')+'</div>' : ''}
+  ${sampleHintHTML()}
+  <h2 class="sec"><span>${weekOffset===0?'這一週':'下一週'} <small style="font-weight:400;color:var(--muted);font-size:.75em">${md(start)}–${md(addDays(start,6))}</small></span>
+    <span class="seg" role="group" aria-label="切換週次"><button id="wk0" aria-pressed="${weekOffset===0}">本週</button><button id="wk1" aria-pressed="${weekOffset===1}">下週</button></span></h2>
+  ${weekHTML(weekOffset)}
+  <div class="btnrow two">
+    <button class="secondary" id="share-week">📤 分享${weekOffset===0?'這週':'下週'}行程</button>
+    <button class="secondary" data-view="add" style="border-color:var(--red);color:var(--red)">＋ 新增活動</button>
+  </div>`;
+}
+
+function renderMonth(){
+  const y = monthCursor.getFullYear(), m = monthCursor.getMonth();
+  const first = new Date(y,m,1), gridStart = addDays(first, -first.getDay());
+  let h = `<div class="month"><div class="month-top"><button class="iconbtn" id="mprev" aria-label="上個月">‹</button><b>${y} 年 ${m+1} 月</b><button class="iconbtn" id="mnext" aria-label="下個月">›</button></div><div class="mgrid">`;
+  WD.forEach((w,i)=> h += `<div class="h ${i===0?'sun':i===6?'sat':''}">${w}</div>`);
+  for (let i=0;i<42;i++){
+    const d = addDays(gridStart,i); if (i>=35 && d.getMonth()!==m) break;
+    const evs = eventsOn(d);
+    const cls = [d.getMonth()!==m?'out':'', d.getDay()===0?'sun':d.getDay()===6?'sat':'', +d===+TODAY?'today':'', +d===+selDay?'sel':''].join(' ');
+    h += `<button class="cell ${cls}" data-day="${ymd(d)}" aria-label="${d.getMonth()+1}月${d.getDate()}日，${evs.length}個活動"><span class="n">${d.getDate()}</span><span class="dots" aria-hidden="true">${evs.slice(0,2).map(e=>TYPES[e.type].icon).join('')}</span></button>`;
+  }
+  h += '</div></div>';
+  const evs = eventsOn(selDay);
+  h += `<div class="pickday"><h2 class="sec">${selDay.getMonth()+1} 月 ${selDay.getDate()} 日（週${WD[selDay.getDay()]}）</h2>
+    <div class="todaycard">${evs.length ? evs.map(e=>evHTML(e,selDay)).join('') : '<div class="none">這天沒有活動</div>'}
+    <button class="secondary" id="add-this-day">＋ 在這天新增活動</button></div></div>`;
+  return h;
+}
+
+function newDraft(d){ const day = d || TODAY; return {type:null, title:'', repeat:true, weekday:day.getDay(), date:ymd(day), hour:9, min:0, place:''}; }
+const timeLabel = (hh, mm) => (hh<12?'上午':hh<18?'下午':'晚上')+' '+(hh>12?hh-12:hh)+(mm?':30':' 點');
+function renderAdd(){
+  if (!draft) draft = newDraft();
+  const D = draft;
+  return `
+  <h2 class="sec">新增一個活動</h2>
+  <div class="step"><h3>1. 是什麼活動？</h3><div class="choices">
+    ${Object.entries(TYPES).map(([k,t])=>`<button class="choice" data-type="${k}" aria-pressed="${D.type===k}"><span class="big" aria-hidden="true">${t.icon}</span>${t.name}</button>`).join('')}
+  </div>${D.type==='other'?`<input class="field" id="f-title" style="margin-top:10px" placeholder="活動名稱，例如：拿藥" value="${esc(D.title)}">`:''}</div>
+  <div class="step"><h3>2. 每週都有，還是只有一次？</h3><div class="choices w2">
+    <button class="choice" id="rep-yes" aria-pressed="${D.repeat}"><span class="big" aria-hidden="true">🔁</span>每週固定</button>
+    <button class="choice" id="rep-no" aria-pressed="${!D.repeat}"><span class="big" aria-hidden="true">1️⃣</span>只有一次</button></div></div>
+  <div class="step"><h3>3. ${D.repeat?'每週的星期幾？':'哪一天？'}</h3>
+    ${D.repeat ? `<div class="choices w7">${[1,2,3,4,5,6,0].map(w=>`<button class="choice" data-wd="${w}" aria-pressed="${D.weekday===w}" aria-label="星期${WD[w]}">${WD[w]}</button>`).join('')}</div>`
+      : `<input type="date" class="field" id="f-date" value="${D.date}">`}</div>
+  <div class="step"><h3>4. 幾點開始？</h3>
+    <div class="stepper"><output id="f-time">${timeLabel(D.hour, D.min)}</output>
+      <button class="choice" id="h-minus" aria-label="提早半小時">－ 早一點</button><button class="choice" id="h-plus" aria-label="延後半小時">＋ 晚一點</button></div></div>
+  <div class="step"><h3>5. 在哪裡？ <small>（可以不填）</small></h3><input class="field" id="f-place" placeholder="例如：活動中心" value="${esc(D.place)}"></div>
+  <button class="primary" id="save">儲存這個活動</button>`;
+}
+
+function renderSettings(){
+  const s = S.settings;
+  const sw = (id,on) => `<button class="switch" role="switch" id="${id}" aria-checked="${on}"><span>${on?'開':'關'}</span></button>`;
+  const hourName = h => h<12?'上午 '+h:h===12?'中午 12':'晚上 '+(h-12);
+  return `
+  <h2 class="sec">提醒設定</h2>
+  <div class="notice warn"><b>目前是測試版</b><p>提醒會在你<b style="display:inline;color:inherit">打開 App 時</b>出現。之後的手機 App 版本，App 關著也會自動跳出提醒。</p></div>
+  <div class="setrow"><div class="lbl"><b>週日預告下週行程</b><span>每週日 ${hourName(s.sundayHour)} 點以後，打開就看到下週活動</span></div>${sw('s-sunday',s.sunday)}</div>
+  ${s.sunday?`<div class="step"><h3>預告時間（週日）</h3><div class="choices">${[18,19,20,21,9,12].map(h=>`<button class="choice" data-sh="${h}" aria-pressed="${s.sundayHour===h}">${hourName(h)} 點</button>`).join('')}</div></div>`:''}
+  <div class="setrow"><div class="lbl"><b>活動前一天提醒</b><span>前一天晚上 6 點以後，提醒明天要做什麼</span></div>${sw('s-daybefore',s.dayBefore)}</div>
+  <div class="setrow"><div class="lbl"><b>出門前提醒</b><span>活動開始前 1 個半小時內，提醒準備出門</span></div>${sw('s-hour',s.hourBefore)}</div>
+  <h2 class="sec">看得清楚</h2>
+  <div class="step"><h3>字的大小</h3><div class="choices">${FONT_LEVELS.map((f,i)=>`<button class="choice" data-fl="${i}" aria-pressed="${s.fontLevel===i}"><span style="font-size:${1+i*.25}em;line-height:1.1" aria-hidden="true">字</span>${f.name}</button>`).join('')}</div></div>
+  <div class="setrow"><div class="lbl"><b>高對比顏色</b><span>白底黑字、粗黑框，看不清楚時打開</span></div>${sw('s-contrast',!!s.highContrast)}</div>
+  ${isStandalone() ? '' : `<h2 class="sec">放到手機桌面</h2><button class="primary" id="install">📲 把好日子放到手機桌面</button>`}
+  <h2 class="sec">試試看提醒長怎樣</h2>
+  <div class="btnrow"><button class="secondary" id="try-sunday">🔔 週日的「下週預告」</button><button class="secondary" id="try-day">🔔 前一天的提醒</button></div>
+  <h2 class="sec">資料</h2>
+  <div class="btnrow"><button class="secondary" id="clear-ask">清空所有行程</button><button class="secondary" id="reset-ask">換回範例行程</button></div>
+  <p class="about">好日子行事曆 ${APP_VERSION}・行程只存在這支手機裡</p>`;
+}
+
+// ---------- 彈出視窗與提示 ----------
+function toast(msg){ const t = document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.textContent=msg; $('#toast-host').replaceChildren(t); setTimeout(()=>t.remove(), 2600); }
+function sheet(html){ $('#overlay-host').innerHTML = `<div class="overlay" id="ov"><div class="sheetbox" role="dialog" aria-modal="true">${html}</div></div>`; const f = $('#overlay-host .sheetbox button, #overlay-host .sheetbox a'); if (f) f.focus(); }
+function closeSheet(){ $('#overlay-host').innerHTML=''; }
+function confirmSheet(title, body, yesId, yesLabel){
+  sheet(`<h3>${title}</h3><p class="sub">${body}</p><div class="btnrow two"><button class="secondary" id="sheet-close">不要</button><button class="primary" id="${yesId}">${yesLabel}</button></div>`);
+}
+
+const canSpeak = 'speechSynthesis' in window;
+let speechText = '';
+function speak(text){ try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang='zh-TW'; u.rate=.85; speechSynthesis.speak(u); } catch(e){ toast('這支手機不能朗讀'); } }
+
+// ---------- 分享（直接開 LINE；電腦上可複製） ----------
+const lineURL = text => 'https://line.me/R/share?text=' + encodeURIComponent(text);
+function shareSheet(text){
+  sheet(`<h3>分享給朋友</h3><p class="sub">下面這段話會傳給你選的 LINE 朋友或群組</p>
+    <div class="todaycard" style="white-space:pre-line;font-size:1em" id="share-text">${esc(text)}</div>
+    <div class="btnrow">
+      <a class="primary line" href="${lineURL(text)}" target="_blank" rel="noopener">用 LINE 傳送</a>
+      ${navigator.share ? '<button class="secondary" id="share-other">用其他方式傳送</button>' : ''}
+      <button class="secondary" id="copy-share">📋 複製這段話</button>
+      <button class="secondary" id="sheet-close">先不要</button></div>`);
+}
+function weekShareText(offset){
+  const start = startOfWeek(addDays(TODAY, offset*7)); const lines=[];
+  for (let i=0;i<7;i++){ const d=addDays(start,i); eventsOn(d).forEach(e=>lines.push(`週${WD[d.getDay()]}（${md(d)}）${fmtTime(e.time)} ${titleOf(e)}${e.place?'，'+e.place:''}`)); }
+  return `我${offset===0?'這週':'下週'}的行程：\n`+(lines.length?lines.join('\n'):'沒有活動')+'\n要不要一起來？';
+}
+function eventShareText(e, d){
+  const diff = Math.round((d-TODAY)/864e5);
+  const when = diff===0?'今天':diff===1?'明天':(startOfWeek(d).getTime()===startOfWeek(TODAY).getTime()?'這禮拜':'下禮拜')+WD[d.getDay()];
+  return `${when}（${md(d)}）${fmtTime(e.time)}，我們一起去${titleOf(e)}！${e.place?'\n地點：'+e.place:''}`;
+}
+
+// ---------- 提醒 ----------
+function nextWeekPreview(){
+  const start = startOfWeek(addDays(TODAY,7)); const days = []; let total=0; const speech=[];
+  for (let i=0;i<7;i++){ const d=addDays(start,i), evs=eventsOn(d); if(evs.length){ days.push([d,evs]); total+=evs.length;
+    speech.push('週'+WD[d.getDay()]+'，'+evs.map(e=>fmtTime(e.time)+titleOf(e)).join('，')); } }
+  return {start, days, total, speech:'下週行程預告。'+(speech.length?speech.join('。'):'下週沒有活動')+'。'};
+}
+function showWeekPreview(){
+  const p = nextWeekPreview();
+  sheet(`<h3>下週行程預告</h3><p class="sub">${md(p.start)}（一）到 ${md(addDays(p.start,6))}（日），共 ${p.total} 個活動</p>
+    ${p.days.map(([d,evs])=>`<div class="preview-day"><b>週${WD[d.getDay()]}　${md(d)}</b><div class="todaycard">${evs.map(e=>evHTML(e,d)).join('')}</div></div>`).join('') || '<div class="none">下週沒有活動</div>'}
+    <div class="btnrow">${canSpeak?'<button class="secondary" id="speak-week">🔊 唸給我聽</button>':''}<button class="primary" id="sheet-close">知道了</button></div>`);
+  speechText = p.speech;
+}
+function nextEventDay(from){
+  for (let i=from;i<14;i++){ const d = addDays(TODAY,i), evs = eventsOn(d); if (evs.length) return [d,evs]; }
+  return null;
+}
+function notify(kind, extra){
+  const bn = $('#banner');
+  if (kind==='sunday'){
+    const p = nextWeekPreview();
+    $('#bn-title').textContent = '下週行程預告';
+    $('#bn-body').textContent = p.total ? `下週有 ${p.total} 個活動：` + p.days.map(([d,evs])=>'週'+WD[d.getDay()]+evs.map(e=>titleOf(e)).join('、')).join('，') : '下週沒有活動，好好休息。';
+    bn.dataset.kind='sunday';
+  } else if (kind==='soon'){
+    const e = extra, [h,m] = e.time.split(':').map(Number);
+    const mins = Math.round((new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate(),h,m) - new Date())/60000);
+    $('#bn-title').textContent = `再過 ${mins} 分鐘要去${titleOf(e)}`;
+    $('#bn-body').textContent = `${fmtTime(e.time)}${e.place?'，在'+e.place:''}，記得準備出門喔。`;
+    bn.dataset.kind='day'; bn.dataset.date = ymd(TODAY);
+  } else {
+    const n = nextEventDay(1); if (!n){ toast('最近兩週沒有活動'); return; }
+    const [d,evs] = n, e = evs[0], diff = Math.round((d-TODAY)/864e5);
+    const when = diff===1 ? '明天' : diff+' 天後';
+    $('#bn-title').textContent = `${when}（週${WD[d.getDay()]}）要${titleOf(e)}`;
+    $('#bn-body').textContent = `${fmtTime(e.time)}${e.place?'，在'+e.place:''}${evs.length>1?`，另外還有 ${evs.length-1} 個活動`:''}`;
+    bn.dataset.kind='day'; bn.dataset.date = ymd(d);
+  }
+  bn.classList.add('show');
+}
+// 打開 App 時，依時間自動跳出提醒（每種提醒每天最多一次）
+function autoRemind(){
+  const now = new Date(), today = ymd(TODAY), shown = load(SHOWN_KEY, {}), s = S.settings;
+  const mark = k => { shown[k] = today; store(SHOWN_KEY, shown); };
+  if (s.hourBefore){
+    const soon = eventsOn(TODAY).find(e => { const [h,m] = e.time.split(':').map(Number); const diff = (new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate(),h,m) - now)/60000; return diff > 0 && diff <= 90; });
+    if (soon && shown['soon-'+soon.id] !== today){ mark('soon-'+soon.id); return notify('soon', soon); }
+  }
+  if (s.sunday && now.getDay()===0 && now.getHours() >= s.sundayHour && shown.sunday !== today){ mark('sunday'); return notify('sunday'); }
+  if (s.dayBefore && now.getHours() >= 18 && eventsOn(addDays(TODAY,1)).length && shown.day !== today){ mark('day'); return notify('day'); }
+}
+
+// ---------- 操作 ----------
+document.addEventListener('click', ev => {
+  const t = ev.target;
+  if (t.id==='ov') { closeSheet(); return; }
+  const b = t.closest('button'); if (!b) return;
+  const id = b.id;
+  if (b.dataset.view){ view = b.dataset.view; if (view==='add') draft = newDraft(); closeSheet(); render(); return; }
+  if (id==='wk0'||id==='wk1'){ weekOffset = id==='wk1'?1:0; render(); return; }
+  if (id==='mprev'||id==='mnext'){ monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth()+(id==='mnext'?1:-1), 1); render(); return; }
+  if (b.dataset.day){ selDay = parseYmd(b.dataset.day); render(); return; }
+  if (id==='add-this-day'){ draft = newDraft(selDay); draft.repeat=false; view='add'; render(); return; }
+  // 新增表單
+  if (b.dataset.type){ draft.type = b.dataset.type; render(); return; }
+  if (id==='rep-yes'||id==='rep-no'){ draft.repeat = id==='rep-yes'; render(); return; }
+  if (b.dataset.wd){ draft.weekday = +b.dataset.wd; render(); return; }
+  if (id==='h-minus'||id==='h-plus'){
+    let mins = draft.hour*60+draft.min + (id==='h-plus'?30:-30); mins = Math.max(300, Math.min(1350, mins));
+    draft.hour = Math.floor(mins/60); draft.min = mins%60; $('#f-time').textContent = timeLabel(draft.hour, draft.min); return;
+  }
+  if (id==='save'){
+    if (!draft.type){ toast('請先選「是什麼活動」'); return; }
+    if (draft.type==='other' && !draft.title.trim()){ toast('請填寫活動名稱'); return; }
+    const e = {id:Date.now(), type:draft.type, title:draft.title.trim(), repeat:draft.repeat, time:pad(draft.hour)+':'+pad(draft.min), place:draft.place.trim()};
+    if (draft.repeat) e.weekday = draft.weekday; else e.date = draft.date;
+    S.events.push(e); save();
+    const when = draft.repeat ? '每週'+WD[draft.weekday] : draft.date.slice(5).replace('-','/');
+    view='week'; weekOffset=0; render(); toast(`已加入：${when} ${titleOf(e)}`); return;
+  }
+  // 活動詳細
+  if (b.dataset.ev){
+    const e = S.events.find(x=>x.id==b.dataset.ev); if (!e) return;
+    const dd = parseYmd(b.dataset.date);
+    const say = (e.repeat?'每週'+WD[e.weekday]:'週'+WD[dd.getDay()])+'，'+fmtTime(e.time)+'，'+titleOf(e)+(e.place?'，在'+e.place:'');
+    sheet(`<h3>${TYPES[e.type].icon} ${esc(titleOf(e))}</h3>
+      <p class="sub">${e.repeat?'每週'+WD[e.weekday]:(dd.getMonth()+1)+' 月 '+dd.getDate()+' 日（週'+WD[dd.getDay()]+'）'}　${fmtTime(e.time)}</p>
+      ${e.place?`<div class="todaycard" style="margin-bottom:12px">📍 ${esc(e.place)}</div>`:''}
+      <button class="primary line" id="share-one" data-id="${e.id}" data-date="${b.dataset.date}" style="margin-bottom:10px">📤 分享給朋友，約一起去</button>
+      <div id="del-area"><button class="secondary" id="del-ask" data-id="${e.id}">刪除這個活動</button></div>
+      <div class="btnrow">${canSpeak?`<button class="secondary" id="speak-one" data-say="${esc(say)}">🔊 唸給我聽</button>`:''}<button class="primary" id="sheet-close">關閉</button></div>`);
+    return;
+  }
+  if (id==='del-ask'){ $('#del-area').innerHTML = `<div class="confirm"><p>確定要刪除嗎？${S.events.find(x=>x.id==b.dataset.id)?.repeat?'每週的這個活動都會一起刪掉。':''}</p><div class="choices w2"><button class="choice" id="sheet-close">不要刪</button><button class="choice" id="del-yes" data-id="${b.dataset.id}" style="background:var(--red);color:var(--on-color);border-color:var(--red)">確定刪除</button></div></div>`; return; }
+  if (id==='del-yes'){ S.events = S.events.filter(x=>x.id!=b.dataset.id); S.sample=false; save(); closeSheet(); render(); toast('已刪除'); return; }
+  if (id==='sheet-close'){ closeSheet(); return; }
+  // 分享
+  if (id==='share-week'){ shareSheet(weekShareText(weekOffset)); return; }
+  if (id==='share-one'){ const e=S.events.find(x=>x.id==b.dataset.id); shareSheet(eventShareText(e, parseYmd(b.dataset.date))); return; }
+  if (id==='share-other'){ navigator.share({text:$('#share-text').textContent}).catch(()=>{}); return; }
+  if (id==='copy-share'){ const txt=$('#share-text').textContent;
+    const fallback=()=>{ const r=document.createRange(); r.selectNodeContents($('#share-text')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('已選取文字，請長按複製'); };
+    try { navigator.clipboard.writeText(txt).then(()=>toast('已複製！打開 LINE 貼上就可以'), fallback); } catch(err){ fallback(); } return; }
+  if (id==='speak-week'){ speak(speechText); return; }
+  if (id==='speak-one'){ speak(b.dataset.say); return; }
+  // 安裝
+  if (id==='install'){ doInstall(); return; }
+  if (id==='install-later'){ store(INSTALL_KEY, true); render(); return; }
+  // 範例資料
+  if (id==='keep-sample'){ S.sample=false; save(); render(); return; }
+  if (id==='clear-ask'){ confirmSheet('清空所有行程？', '所有活動都會刪掉，刪掉後不能復原。', 'clear-yes', '確定清空'); return; }
+  if (id==='clear-yes'){ S.events=[]; S.sample=false; save(); closeSheet(); view='week'; render(); toast('已清空，按「新增」記下第一個活動'); return; }
+  if (id==='reset-ask'){ confirmSheet('換回範例行程？', '你現在的行程會被範例取代，不能復原。', 'reset-yes', '確定換回'); return; }
+  if (id==='reset-yes'){ S.events=seed(); S.sample=true; save(); closeSheet(); view='week'; render(); toast('已換回範例行程'); return; }
+  // 設定
+  const map = {'s-sunday':'sunday','s-daybefore':'dayBefore','s-hour':'hourBefore','s-contrast':'highContrast'};
+  if (b.dataset.fl){ S.settings.fontLevel = +b.dataset.fl; save(); render(); return; }
+  if (map[id]){ S.settings[map[id]] = !S.settings[map[id]]; save(); render(); return; }
+  if (b.dataset.sh){ S.settings.sundayHour = +b.dataset.sh; save(); render(); return; }
+  if (id==='try-sunday'){ notify('sunday'); return; }
+  if (id==='try-day'){ notify('day'); return; }
+  // 提醒橫幅
+  if (id==='bn-close'){ $('#banner').classList.remove('show'); return; }
+  if (id==='bn-open'){ const bn=$('#banner'); bn.classList.remove('show');
+    if (bn.dataset.kind==='sunday') showWeekPreview();
+    else { selDay=parseYmd(bn.dataset.date); monthCursor=new Date(selDay.getFullYear(),selDay.getMonth(),1); view='month'; render(); }
+    return; }
+});
+document.addEventListener('input', ev => {
+  if (!draft) return;
+  if (ev.target.id==='f-place') draft.place = ev.target.value;
+  if (ev.target.id==='f-title') draft.title = ev.target.value;
+  if (ev.target.id==='f-date' && ev.target.value) draft.date = ev.target.value;
+});
+document.addEventListener('keydown', e => { if (e.key==='Escape') { closeSheet(); $('#banner').classList.remove('show'); } });
+// 跨日：App 放著過了午夜，回到畫面時重新整理日期
+document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible'){ const n=new Date(); n.setHours(0,0,0,0); if (+n !== +TODAY) location.reload(); } });
+
+render();
+setTimeout(autoRemind, 800);
+
+// 離線快取
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+})();

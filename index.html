@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>好日子行事曆</title>
+<meta name="description" content="給長輩用的大字行事曆：每週固定行程、紙本風月曆、提前提醒、分享到 LINE。">
+<meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101216" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="好日子">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&display=swap">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div class="app">
+  <main class="screen" id="screen"></main>
+</div>
+
+<nav class="nav" aria-label="主選單">
+  <button id="nav-week" data-view="week"><span class="big" aria-hidden="true">📋</span>本週</button>
+  <button id="nav-month" data-view="month"><span class="big" aria-hidden="true">🗓️</span>日曆</button>
+  <button id="nav-add" data-view="add" class="add"><span class="big" aria-hidden="true">＋</span>新增</button>
+  <button id="nav-set" data-view="settings"><span class="big" aria-hidden="true">🔔</span>提醒</button>
+</nav>
+
+<div class="banner" id="banner" role="alert" aria-live="assertive">
+  <div class="app-name"><i></i>好日子行事曆</div>
+  <h4 id="bn-title"></h4>
+  <p id="bn-body"></p>
+  <div class="btns"><button id="bn-close">知道了</button><button class="go" id="bn-open">打開看看</button></div>
+</div>
+<div id="overlay-host"></div>
+<div id="toast-host"></div>
+
+<noscript><p style="padding:24px;font-size:20px">請開啟瀏覽器的 JavaScript 才能使用好日子行事曆。</p></noscript>
+<script src="./app.js"></script>
+</body>
+</html>

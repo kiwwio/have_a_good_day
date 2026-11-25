@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>放到手機桌面｜好日子行事曆</title>
+<meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101216" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap">
+<link rel="stylesheet" href="./style.css">
+<style>
+.guide{max-width:var(--app-w);margin:0 auto;padding:calc(16px + env(safe-area-inset-top,0px)) max(18px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px))}
+.guide h1{font-size:1.5em;margin:8px 0 4px;line-height:1.3;text-wrap:balance}
+.guide .lead{margin:0 0 16px;color:var(--ink-soft)}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:14px;counter-reset:s}
+.steps li{background:var(--sheet);border:2px solid var(--line);border-radius:18px;padding:14px;display:grid;gap:10px;counter-increment:s}
+.steps li > b{display:flex;gap:10px;align-items:flex-start;font-size:1.05em;line-height:1.4}
+.steps li > b::before{content:counter(s);flex:none;width:1.8em;height:1.8em;border-radius:50%;background:var(--red);color:var(--on-color);display:grid;place-items:center;font-size:.95em}
+/* 示意畫面：用簡化的手機介面幫長輩對照要按哪裡 */
+.mock{border:2px solid var(--line);border-radius:14px;background:var(--paper);padding:10px;font-size:.8em;display:grid;gap:8px}
+.mock .bar{display:flex;align-items:center;gap:8px;background:var(--sheet);border:1.5px solid var(--line);border-radius:10px;padding:6px 10px}
+.mock .url{flex:1;min-width:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock .hit{display:inline-grid;place-items:center;min-width:2.2em;height:2.2em;border-radius:10px;border:3px solid var(--red);background:var(--red-soft);color:var(--red);font-weight:900;animation:pulse 1.6s ease-in-out infinite}
+.mock .menu{background:var(--sheet);border:1.5px solid var(--line);border-radius:10px;overflow:hidden}
+.mock .menu div{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--muted)}
+.mock .menu div:last-child{border-bottom:0}
+.mock .menu .on{color:var(--red);font-weight:900;background:var(--red-soft);outline:3px solid var(--red);outline-offset:-3px}
+.mock .home{display:flex;gap:14px;align-items:center;justify-content:center;padding:6px}
+.mock .home img{width:64px;height:64px;border-radius:16px;box-shadow:0 0 0 4px var(--red)}
+.mock .home span{display:block;text-align:center;font-weight:700;color:var(--ink)}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.tip{background:var(--orange-soft);border:2px solid var(--orange);border-radius:16px;padding:12px 14px;margin-top:16px}
+.tip b{color:var(--orange)}
+.back{margin-top:16px}
+</style>
+</head>
+<body>
+<div class="guide">
+  <h1>把好日子放到手機桌面</h1>
+  <p class="lead">放好以後，在手機桌面點「好日子」就能打開，就像一般的 App。</p>
+
+  <div class="tabs" role="group" aria-label="選擇手機">
+    <button class="choice" id="t-android" aria-pressed="true"><span class="big" aria-hidden="true">🤖</span>安卓手機</button>
+    <button class="choice" id="t-iphone" aria-pressed="false"><span class="big" aria-hidden="true">🍎</span>iPhone</button>
+  </div>
+
+  <ol class="steps" id="android">
+    <li><b>用 Chrome 打開好日子的網址</b>
+      <div class="mock"><div class="bar"><span class="url">好日子行事曆的網址</span><span>⋮</span></div></div></li>
+    <li><b>按右上角的「⋮」（三個點）</b>
+      <div class="mock"><div class="bar"><span class="url">好日子行事曆的網址</span><span class="hit">⋮</span></div></div></li>
+    <li><b>按「加到主畫面」或「安裝應用程式」</b>
+      <div class="mock"><div class="menu"><div>新增分頁</div><div>書籤</div><div class="on">📲 加到主畫面</div><div>設定</div></div></div></li>
+    <li><b>再按一次「安裝」或「新增」</b>
+      <div class="mock"><div class="menu"><div class="on">安裝</div></div></div></li>
+    <li><b>回到手機桌面，找到這個圖示</b>
+      <div class="mock"><div class="home"><div><img src="./icons/icon-192.png" alt=""><span>好日子</span></div></div></div></li>
+  </ol>
+
+  <ol class="steps" id="iphone" hidden>
+    <li><b>用 Safari（藍色指南針）打開好日子的網址</b>
+      <div class="mock"><div class="bar"><span class="url">好日子行事曆的網址</span></div></div></li>
+    <li><b>按畫面下方中間的「分享」按鈕（方塊加向上箭頭）</b>
+      <div class="mock"><div class="bar" style="justify-content:space-around"><span>‹</span><span>›</span><span class="hit">⬆︎</span><span>📖</span><span>⧉</span></div></div></li>
+    <li><b>往下滑，按「加入主畫面」</b>
+      <div class="mock"><div class="menu"><div>拷貝</div><div>加入書籤</div><div class="on">⊞ 加入主畫面</div></div></div></li>
+    <li><b>按右上角的「新增」</b>
+      <div class="mock"><div class="bar"><span class="url">好日子</span><span class="hit" style="padding:0 8px">新增</span></div></div></li>
+    <li><b>回到手機桌面，找到這個圖示</b>
+      <div class="mock"><div class="home"><div><img src="./icons/icon-192.png" alt=""><span>好日子</span></div></div></div></li>
+  </ol>
+
+  <div class="tip"><b>找不到按鈕？</b> 每支手機的畫面可能有一點不同。請家人或志工幫忙，一次就好，之後都從桌面打開。</div>
+  <div class="back"><a class="primary" href="./">回到好日子行事曆</a></div>
+</div>
+<script>
+(function(){
+  const show = which => {
+    document.getElementById('android').hidden = which !== 'android';
+    document.getElementById('iphone').hidden = which !== 'iphone';
+    document.getElementById('t-android').setAttribute('aria-pressed', which === 'android');
+    document.getElementById('t-iphone').setAttribute('aria-pressed', which === 'iphone');
+  };
+  document.getElementById('t-android').onclick = () => { show('android'); history.replaceState(null, '', '#android'); };
+  document.getElementById('t-iphone').onclick = () => { show('iphone'); history.replaceState(null, '', '#iphone'); };
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  show(location.hash === '#iphone' || (location.hash !== '#android' && ios) ? 'iphone' : 'android');
+  try { const s = JSON.parse(localStorage.getItem('elder-cal-v1') || '{}').settings || {};
+    const fs = ['1.25rem','1.5rem','1.75rem'][s.fontLevel || 0]; document.documentElement.style.setProperty('--fs', fs);
+    if (s.highContrast) document.documentElement.dataset.contrast = 'high'; } catch (e) {}
+})();
+</script>
+</body>
+</html>
