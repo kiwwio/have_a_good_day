@@ -1,4 +1,6 @@
-# 好日子行事曆 v2.0（網頁 App）
+# 好日子行事曆 v2.1（網頁 App）
+
+目前網址：https://kiwwio.github.io/have_a_good_day/
 
 給長輩用的大字行事曆，可加到手機桌面、沒網路也能打開。
 
@@ -29,10 +31,10 @@ python -m http.server 8766
 不需要寫指令，用網頁操作即可：
 
 1. 登入 GitHub，按右上角「＋」→「New repository」。
-2. Repository name 填 `haorizi`（網址會用到，建議英文），選 **Public**，按「Create repository」。
+2. Repository name 填 `have_a_good_day`（網址會用到，建議英文），選 **Public**，按「Create repository」。
 3. 在新的儲存庫頁面按「uploading an existing file」，把本資料夾**裡面的所有檔案和 `icons` 資料夾**拖進去（不要拖整個外層資料夾），按「Commit changes」。
 4. 到儲存庫的「Settings」→ 左側「Pages」→ Source 選「Deploy from a branch」→ Branch 選 `main`、資料夾選 `/ (root)` → 「Save」。
-5. 等 1～2 分鐘，頁面上方會出現網址，格式是 `https://你的帳號.github.io/haorizi/`。
+5. 等 1～2 分鐘，頁面上方會出現網址，格式是 `https://你的帳號.github.io/have_a_good_day/`。
 
 **注意**：Public 儲存庫的程式碼任何人都看得到。程式裡沒有個人資料（長輩的行程只存在各自手機裡），可以公開。
 

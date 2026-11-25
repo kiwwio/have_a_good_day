@@ -1,4 +1,4 @@
-/* 好日子行事曆 v2.0 — 正式網頁 App（PWA）樣式
+/* 好日子行事曆 v2.1 — 正式網頁 App（PWA）樣式
    視覺取自台灣撕頁日曆：紙白、墨黑、日曆紅。
    長輩配色原則：文字對比全部 ≥ 7:1（WCAG AAA）；底色用暖米白避免純白眩光；
    不用藍紫相近色（老化水晶體偏黃，藍紫難分）；顏色一定搭配圖示＋文字，不單靠顏色辨識。 */
@@ -93,6 +93,16 @@ h2.sec{font-size:1.1em;margin:18px 0 10px;display:flex;flex-wrap:wrap;align-item
 .c-green{--c:var(--green);--c-soft:var(--green-soft)} .c-orange{--c:var(--orange);--c-soft:var(--orange-soft)}
 .c-pink{--c:var(--pink);--c-soft:var(--pink-soft)} .c-gray{--c:var(--gray);--c-soft:var(--gray-soft)}
 
+.ev .state{font-size:.65em;font-weight:700;background:var(--gray);color:var(--on-color);border-radius:6px;padding:0 6px;margin-left:6px;white-space:nowrap;vertical-align:2px}
+.ev.is-skipped .tt,.ev.is-skipped .meta{text-decoration:line-through;text-decoration-thickness:2px}
+.ev.is-skipped{background:var(--gray-soft);border-left-color:var(--gray)}
+.ev.is-skipped .tt{color:var(--ink-soft)}
+.ev.is-done{background:var(--gray-soft)}
+.cell .more{font-family:var(--sans);font-size:.7em;font-weight:700;color:var(--ink-soft);margin-left:2px}
+.toast{display:flex;align-items:center;gap:12px}
+/* 底部視窗打開時，提示改到畫面上方，不擋住按鈕 */
+#overlay-host:not(:empty) + #toast-host .toast{bottom:auto;top:calc(16px + env(safe-area-inset-top,0px))}
+.toast button{flex:none;min-height:48px;padding:0 16px;border-radius:10px;border:2px solid var(--paper);background:transparent;color:var(--paper);font-weight:900}
 .todaycard{background:var(--sheet);border:2px solid var(--line);border-radius:18px;padding:12px;display:grid;gap:8px}
 .todaycard .ev{min-height:68px}
 .todaycard .ev .tt{font-size:1.2em}

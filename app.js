@@ -1,9 +1,9 @@
-/* 好日子行事曆 v2.0 — 網頁 App（PWA）主程式
+/* 好日子行事曆 v2.1 — 網頁 App（PWA）主程式
    階段一：可加到手機桌面、離線可開、分享直接開 LINE。
    提醒：打開 App 時依時間自動跳出（週日預告、前一天、出門前）；關閉 App 時的系統通知留待階段二（手機 App）。 */
 (function(){
 'use strict';
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'v2.1';
 const WD = ['日','一','二','三','四','五','六'];
 const TYPES = {
   book:  {name:'讀書會', icon:'📖', color:'c-blue'},
@@ -57,8 +57,25 @@ let draft = null;
 
 const titleOf = e => e.type==='other' && e.title ? e.title : TYPES[e.type].name;
 function eventsOn(d){
+  // 預設不含「這次不去」的活動；畫面列表傳 true 以便顯示並可恢復
+  return eventsAll(d).filter(e => !isSkipped(e, d));
+}
+function eventsAll(d){
   const key = ymd(d), wd = d.getDay();
   return S.events.filter(e => e.repeat ? e.weekday===wd : e.date===key).sort((a,b)=>a.time.localeCompare(b.time));
+}
+const isSkipped = (e, d) => !!(e.repeat && e.skip && e.skip.includes(ymd(d)));
+// 今天已經結束的活動（開始後超過 2 小時）
+function isDoneToday(e, d){
+  if (+d !== +TODAY) return false;
+  const [h,m] = e.time.split(':').map(Number);
+  return new Date() - new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m) > 2*3600e3;
+}
+// 下一次發生的日期（從今天算起）
+function nextOccurrence(e){
+  if (!e.repeat) return parseYmd(e.date);
+  for (let i=0;i<14;i++){ const d = addDays(TODAY,i); if (d.getDay()===e.weekday && !isSkipped(e,d)) return d; }
+  return null;
 }
 
 // ---------- 安裝到手機桌面 ----------
@@ -76,17 +93,18 @@ async function doInstall(){
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function evHTML(e, d){
-  const t = TYPES[e.type];
-  return `<button class="ev ${t.color}" data-ev="${e.id}" data-date="${ymd(d)}">
+  const t = TYPES[e.type], skipped = isSkipped(e, d), done = !skipped && isDoneToday(e, d);
+  const state = skipped ? '<span class="state">這次不去</span>' : done ? '<span class="state">已結束</span>' : '';
+  return `<button class="ev ${t.color} ${skipped?'is-skipped':''} ${done?'is-done':''}" data-ev="${e.id}" data-date="${ymd(d)}">
     <span class="ic" aria-hidden="true">${t.icon}</span>
-    <span class="tx"><span class="tt">${esc(titleOf(e))}</span>${e.repeat?'<span class="rep">每週</span>':''}
+    <span class="tx"><span class="tt">${esc(titleOf(e))}</span>${e.repeat?'<span class="rep">每週</span>':''}${state}
     <span class="meta">${fmtTime(e.time)}${e.place?' · '+esc(e.place):''}</span></span></button>`;
 }
 function weekHTML(offset){
   const start = startOfWeek(addDays(TODAY, offset*7));
   let h = '<div class="daylist">';
   for (let i=0;i<7;i++){
-    const d = addDays(start,i), evs = eventsOn(d);
+    const d = addDays(start,i), evs = eventsAll(d);
     const isToday = +d === +TODAY, past = d < TODAY;
     h += `<div class="day ${isToday?'is-today':''} ${past?'is-past':''} ${(d.getDay()%6===0)?'weekend':''}">
       <div class="wd"><b>週${WD[d.getDay()]}</b><span>${md(d)}</span>${isToday?'<span class="tag">今天</span>':past?'<span class="tag past">已過</span>':''}</div>
@@ -108,7 +126,8 @@ function render(){
 }
 
 function installHintHTML(){
-  if (isStandalone() || load(INSTALL_KEY, false)) return '';
+  // 一次只顯示一個提示：範例行程提示優先
+  if (S.sample || isStandalone() || load(INSTALL_KEY, false)) return '';
   return `<div class="notice"><b>📲 把好日子放到手機桌面</b><p>以後在桌面點一下就能打開，不用再找網址。</p>
     <div class="row"><button class="secondary" id="install">怎麼放？</button><button class="secondary" id="install-later">先不用</button></div></div>`;
 }
@@ -121,15 +140,15 @@ function sampleHintHTML(){
 function renderWeek(){
   const todays = eventsOn(TODAY);
   const start = startOfWeek(addDays(TODAY, weekOffset*7));
+  const todaysAll = eventsAll(TODAY);
   return `
-  ${installHintHTML()}
   <div class="today-head">
     <div class="tearsheet"><div class="m">${TODAY.getMonth()+1} 月</div><div class="d">${TODAY.getDate()}</div><div class="w">星期${WD[TODAY.getDay()]}</div></div>
     <div><h1>${todays.length ? '今天有 '+todays.length+' 個活動' : '今天沒有活動'}</h1>
-    <p>${todays.length ? '別忘了出門時間喔' : '可以在家休息，或按「新增」記下行程'}</p></div>
+    <p>${todays.length ? (todays.every(e=>isDoneToday(e,TODAY)) ? '今天的活動都結束了，辛苦了' : '別忘了出門時間喔') : '可以在家休息，或按「新增」記下行程'}</p></div>
   </div>
-  ${todays.length ? '<div class="todaycard">'+todays.map(e=>evHTML(e,TODAY)).join('')+'</div>' : ''}
-  ${sampleHintHTML()}
+  ${todaysAll.length ? '<div class="todaycard">'+todaysAll.map(e=>evHTML(e,TODAY)).join('')+'</div>' : ''}
+  ${sampleHintHTML()}${installHintHTML()}
   <h2 class="sec"><span>${weekOffset===0?'這一週':'下一週'} <small style="font-weight:400;color:var(--muted);font-size:.75em">${md(start)}–${md(addDays(start,6))}</small></span>
     <span class="seg" role="group" aria-label="切換週次"><button id="wk0" aria-pressed="${weekOffset===0}">本週</button><button id="wk1" aria-pressed="${weekOffset===1}">下週</button></span></h2>
   ${weekHTML(weekOffset)}
@@ -148,23 +167,29 @@ function renderMonth(){
     const d = addDays(gridStart,i); if (i>=35 && d.getMonth()!==m) break;
     const evs = eventsOn(d);
     const cls = [d.getMonth()!==m?'out':'', d.getDay()===0?'sun':d.getDay()===6?'sat':'', +d===+TODAY?'today':'', +d===+selDay?'sel':''].join(' ');
-    h += `<button class="cell ${cls}" data-day="${ymd(d)}" aria-label="${d.getMonth()+1}月${d.getDate()}日，${evs.length}個活動"><span class="n">${d.getDate()}</span><span class="dots" aria-hidden="true">${evs.slice(0,2).map(e=>TYPES[e.type].icon).join('')}</span></button>`;
+    h += `<button class="cell ${cls}" data-day="${ymd(d)}" aria-label="${d.getMonth()+1}月${d.getDate()}日，${evs.length}個活動"><span class="n">${d.getDate()}</span><span class="dots" aria-hidden="true">${evs.slice(0,2).map(e=>TYPES[e.type].icon).join('')}${evs.length>2?'<span class="more">+'+(evs.length-2)+'</span>':''}</span></button>`;
   }
   h += '</div></div>';
-  const evs = eventsOn(selDay);
+  const evs = eventsAll(selDay);
   h += `<div class="pickday"><h2 class="sec">${selDay.getMonth()+1} 月 ${selDay.getDate()} 日（週${WD[selDay.getDay()]}）</h2>
     <div class="todaycard">${evs.length ? evs.map(e=>evHTML(e,selDay)).join('') : '<div class="none">這天沒有活動</div>'}
     <button class="secondary" id="add-this-day">＋ 在這天新增活動</button></div></div>`;
   return h;
 }
 
-function newDraft(d){ const day = d || TODAY; return {type:null, title:'', repeat:true, weekday:day.getDay(), date:ymd(day), hour:9, min:0, place:''}; }
+function newDraft(d){ const day = d || TODAY; return {editId:null, type:null, title:'', repeat:true, weekday:day.getDay(), date:ymd(day), hour:9, min:0, place:''}; }
+// 修改既有活動：把資料帶進表單（時間不在半小時格上時，取最近的半小時）
+function draftFrom(e, d){
+  const [h,m] = e.time.split(':').map(Number); const mins = Math.round((h*60+m)/30)*30;
+  return {editId:e.id, type:e.type, title:e.title||'', repeat:e.repeat, weekday:e.repeat?e.weekday:d.getDay(),
+    date:e.repeat?ymd(d):e.date, hour:Math.floor(mins/60), min:mins%60, place:e.place||''};
+}
 const timeLabel = (hh, mm) => (hh<12?'上午':hh<18?'下午':'晚上')+' '+(hh>12?hh-12:hh)+(mm?':30':' 點');
 function renderAdd(){
   if (!draft) draft = newDraft();
   const D = draft;
   return `
-  <h2 class="sec">新增一個活動</h2>
+  <h2 class="sec">${D.editId ? '修改活動' : '新增一個活動'}</h2>
   <div class="step"><h3>1. 是什麼活動？</h3><div class="choices">
     ${Object.entries(TYPES).map(([k,t])=>`<button class="choice" data-type="${k}" aria-pressed="${D.type===k}"><span class="big" aria-hidden="true">${t.icon}</span>${t.name}</button>`).join('')}
   </div>${D.type==='other'?`<input class="field" id="f-title" style="margin-top:10px" placeholder="活動名稱，例如：拿藥" value="${esc(D.title)}">`:''}</div>
@@ -178,7 +203,8 @@ function renderAdd(){
     <div class="stepper"><output id="f-time">${timeLabel(D.hour, D.min)}</output>
       <button class="choice" id="h-minus" aria-label="提早半小時">－ 早一點</button><button class="choice" id="h-plus" aria-label="延後半小時">＋ 晚一點</button></div></div>
   <div class="step"><h3>5. 在哪裡？ <small>（可以不填）</small></h3><input class="field" id="f-place" placeholder="例如：活動中心" value="${esc(D.place)}"></div>
-  <button class="primary" id="save">儲存這個活動</button>`;
+  <button class="primary" id="save">${D.editId ? '儲存修改' : '儲存這個活動'}</button>
+  ${D.editId ? '<div class="btnrow"><button class="secondary" id="edit-cancel">不改了</button></div>' : ''}`;
 }
 
 function renderSettings(){
@@ -204,7 +230,16 @@ function renderSettings(){
 }
 
 // ---------- 彈出視窗與提示 ----------
-function toast(msg){ const t = document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); t.textContent=msg; $('#toast-host').replaceChildren(t); setTimeout(()=>t.remove(), 2600); }
+// 提示訊息；可附一個動作按鈕（例如「復原」），有按鈕時停留較久，長輩來得及按
+let toastAction = null, toastTimer = null;
+function toast(msg, actLabel, actFn){
+  const t = document.createElement('div'); t.className='toast'; t.setAttribute('role','status');
+  const span = document.createElement('span'); span.textContent = msg; t.append(span);
+  if (actLabel){ const bt = document.createElement('button'); bt.id='toast-act'; bt.textContent=actLabel; t.append(bt); }
+  toastAction = actFn || null;
+  $('#toast-host').replaceChildren(t); clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.remove(); if (toastAction===actFn) toastAction=null; }, actLabel ? 8000 : 2600);
+}
 function sheet(html){ $('#overlay-host').innerHTML = `<div class="overlay" id="ov"><div class="sheetbox" role="dialog" aria-modal="true">${html}</div></div>`; const f = $('#overlay-host .sheetbox button, #overlay-host .sheetbox a'); if (f) f.focus(); }
 function closeSheet(){ $('#overlay-host').innerHTML=''; }
 function confirmSheet(title, body, yesId, yesLabel){
@@ -312,27 +347,49 @@ document.addEventListener('click', ev => {
   if (id==='save'){
     if (!draft.type){ toast('請先選「是什麼活動」'); return; }
     if (draft.type==='other' && !draft.title.trim()){ toast('請填寫活動名稱'); return; }
-    const e = {id:Date.now(), type:draft.type, title:draft.title.trim(), repeat:draft.repeat, time:pad(draft.hour)+':'+pad(draft.min), place:draft.place.trim()};
-    if (draft.repeat) e.weekday = draft.weekday; else e.date = draft.date;
-    S.events.push(e); save();
+    const old = draft.editId ? S.events.find(x=>x.id===draft.editId) : null;
+    const e = {id: old ? old.id : Date.now(), type:draft.type, title:draft.type==='other'?draft.title.trim():'', repeat:draft.repeat, time:pad(draft.hour)+':'+pad(draft.min), place:draft.place.trim()};
+    if (draft.repeat){ e.weekday = draft.weekday; if (old && old.repeat && old.weekday===e.weekday && old.skip) e.skip = old.skip; }
+    else e.date = draft.date;
+    if (old) S.events = S.events.map(x => x.id===old.id ? e : x); else S.events.push(e);
+    save();
     const when = draft.repeat ? '每週'+WD[draft.weekday] : draft.date.slice(5).replace('-','/');
-    view='week'; weekOffset=0; render(); toast(`已加入：${when} ${titleOf(e)}`); return;
+    view='week'; weekOffset=0; draft=null; render(); toast(`${old?'已修改':'已加入'}：${when} ${titleOf(e)}`); return;
   }
+  if (id==='edit-cancel'){ draft=null; view='week'; render(); return; }
   // 活動詳細
   if (b.dataset.ev){
     const e = S.events.find(x=>x.id==b.dataset.ev); if (!e) return;
     const dd = parseYmd(b.dataset.date);
     const say = (e.repeat?'每週'+WD[e.weekday]:'週'+WD[dd.getDay()])+'，'+fmtTime(e.time)+'，'+titleOf(e)+(e.place?'，在'+e.place:'');
+    const skipped = isSkipped(e, dd), past = dd < TODAY, nx = e.repeat ? nextOccurrence(e) : null;
+    const thisDay = `${dd.getMonth()+1}/${dd.getDate()}（週${WD[dd.getDay()]}）`;
     sheet(`<h3>${TYPES[e.type].icon} ${esc(titleOf(e))}</h3>
-      <p class="sub">${e.repeat?'每週'+WD[e.weekday]:(dd.getMonth()+1)+' 月 '+dd.getDate()+' 日（週'+WD[dd.getDay()]+'）'}　${fmtTime(e.time)}</p>
+      <p class="sub">${e.repeat?'每週'+WD[e.weekday]:(dd.getMonth()+1)+' 月 '+dd.getDate()+' 日（週'+WD[dd.getDay()]+'）'}　${fmtTime(e.time)}${nx?`<br>下一次：${nx.getMonth()+1}/${nx.getDate()}（週${WD[nx.getDay()]}）`:''}</p>
       ${e.place?`<div class="todaycard" style="margin-bottom:12px">📍 ${esc(e.place)}</div>`:''}
-      <button class="primary line" id="share-one" data-id="${e.id}" data-date="${b.dataset.date}" style="margin-bottom:10px">📤 分享給朋友，約一起去</button>
+      ${skipped ? `<div class="confirm" style="margin-bottom:10px"><p>${thisDay}這次不去</p><button class="secondary" id="unskip" data-id="${e.id}" data-date="${b.dataset.date}">恢復，這次要去</button></div>`
+        : `<button class="primary line" id="share-one" data-id="${e.id}" data-date="${b.dataset.date}" style="margin-bottom:10px">📤 分享給朋友，約一起去</button>`}
+      <div class="btnrow two" style="margin:0 0 10px">
+        <button class="secondary" id="edit-one" data-id="${e.id}" data-date="${b.dataset.date}">✏️ 修改</button>
+        ${e.repeat && !skipped && !past && !isDoneToday(e, dd) ? `<button class="secondary" id="skip-one" data-id="${e.id}" data-date="${b.dataset.date}">🚫 ${thisDay}不去</button>` : ''}
+      </div>
       <div id="del-area"><button class="secondary" id="del-ask" data-id="${e.id}">刪除這個活動</button></div>
       <div class="btnrow">${canSpeak?`<button class="secondary" id="speak-one" data-say="${esc(say)}">🔊 唸給我聽</button>`:''}<button class="primary" id="sheet-close">關閉</button></div>`);
     return;
   }
+  if (id==='edit-one'){ const e=S.events.find(x=>x.id==b.dataset.id); if (!e) return; draft = draftFrom(e, parseYmd(b.dataset.date)); closeSheet(); view='add'; render(); return; }
+  if (id==='skip-one'){ const e=S.events.find(x=>x.id==b.dataset.id); if (!e) return;
+    // 只保留今天以後的取消紀錄，避免越存越多
+    e.skip = (e.skip||[]).filter(s => s >= ymd(TODAY)).concat(b.dataset.date); S.sample=false; save(); closeSheet(); render();
+    toast(`${b.dataset.date.slice(5).replace('-','/')} ${titleOf(e)}：這次不去`); return; }
+  if (id==='unskip'){ const e=S.events.find(x=>x.id==b.dataset.id); if (!e) return; e.skip=(e.skip||[]).filter(s=>s!==b.dataset.date); save(); closeSheet(); render(); toast('已恢復，這次要去'); return; }
   if (id==='del-ask'){ $('#del-area').innerHTML = `<div class="confirm"><p>確定要刪除嗎？${S.events.find(x=>x.id==b.dataset.id)?.repeat?'每週的這個活動都會一起刪掉。':''}</p><div class="choices w2"><button class="choice" id="sheet-close">不要刪</button><button class="choice" id="del-yes" data-id="${b.dataset.id}" style="background:var(--red);color:var(--on-color);border-color:var(--red)">確定刪除</button></div></div>`; return; }
-  if (id==='del-yes'){ S.events = S.events.filter(x=>x.id!=b.dataset.id); S.sample=false; save(); closeSheet(); render(); toast('已刪除'); return; }
+  if (id==='del-yes'){
+    const idx = S.events.findIndex(x=>x.id==b.dataset.id); if (idx<0) return;
+    const [gone] = S.events.splice(idx,1); const wasSample = S.sample; S.sample=false; save(); closeSheet(); render();
+    toast(`已刪除「${titleOf(gone)}」`, '復原', () => { S.events.splice(idx,0,gone); S.sample=wasSample; save(); render(); toast('已復原'); });
+    return; }
+  if (id==='toast-act'){ const fn = toastAction; toastAction = null; $('#toast-host').replaceChildren(); if (fn) fn(); return; }
   if (id==='sheet-close'){ closeSheet(); return; }
   // 分享
   if (id==='share-week'){ shareSheet(weekShareText(weekOffset)); return; }
