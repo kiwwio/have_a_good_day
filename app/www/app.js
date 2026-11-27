@@ -1,9 +1,9 @@
-/* 好日子行事曆 v3.0 — 主程式（網頁 App 與 iOS／Android App 共用）
+/* 好日子行事曆 v3.1 — 主程式（網頁 App 與 iOS／Android App 共用）
    網頁版：可加到手機桌面、離線可開；提醒在打開 App 時跳出。
    手機 App 版（Capacitor）：用手機本機排程通知，App 關著也會準時提醒（見「手機本機通知」一節）。 */
 (function(){
 'use strict';
-const APP_VERSION = 'v3.0';
+const APP_VERSION = 'v3.1';
 // 在 iOS／Android App 裡執行時為 true（Capacitor 原生殼）
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const LN = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.LocalNotifications : null;
@@ -54,6 +54,15 @@ const saved = load(STORE_KEY, null);
 if (saved) { S = Object.assign(S, saved); S.settings = Object.assign({}, S.settings, saved.settings||{}); }
 if (S.settings.fontLevel == null) S.settings.fontLevel = S.settings.bigFont ? 1 : 0;
 const save = () => { store(STORE_KEY, S); scheduleNative(); };
+
+// 請手機保留資料：避免手機空間不足或「一鍵清理」時把行程刪掉（v3.1）
+let persisted = null;   // null 不知道／true 已保留／false 手機不答應
+(async () => { try {
+  if (navigator.storage && navigator.storage.persist) {
+    persisted = await navigator.storage.persisted() || await navigator.storage.persist();
+    if (view === 'settings') render();
+  }
+} catch(e){} })();
 
 let view = 'week', weekOffset = 0, monthCursor = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), selDay = new Date(TODAY);
 let draft = null;
@@ -227,9 +236,13 @@ function renderSettings(){
   ${isStandalone() ? '' : `<h2 class="sec">放到手機桌面</h2><button class="primary" id="install">📲 把好日子放到手機桌面</button>`}
   <h2 class="sec">試試看提醒長怎樣</h2>
   <div class="btnrow"><button class="secondary" id="try-sunday">🔔 週日的「下週預告」</button><button class="secondary" id="try-day">🔔 前一天的提醒</button></div>
+  <h2 class="sec">備份行程</h2>
+  <div class="notice${S.lastBackup ? '' : ' warn'}"><b>${S.lastBackup ? '上次備份：' + S.lastBackup.slice(5).replace('-','/') : '還沒有備份過'}</b>
+    <p>行程只存在這支手機裡。把備份傳到 LINE 給家人保存，換手機或資料不見時，貼回來就能救回。</p></div>
+  <div class="btnrow"><button class="primary line" id="backup">📤 備份行程，傳給家人</button><button class="secondary" id="restore">📥 還原行程</button></div>
   <h2 class="sec">資料</h2>
   <div class="btnrow"><button class="secondary" id="clear-ask">清空所有行程</button><button class="secondary" id="reset-ask">換回範例行程</button></div>
-  <p class="about">好日子行事曆 ${APP_VERSION}${NATIVE ? '（手機 App）' : ''}・行程只存在這支手機裡</p>`;
+  <p class="about">好日子行事曆 ${APP_VERSION}${NATIVE ? '（手機 App）' : ''}・行程只存在這支手機裡${persisted === true ? '（已請手機保留）' : ''}</p>`;
 }
 
 // ---------- 彈出視窗與提示 ----------
@@ -256,6 +269,7 @@ function speak(text){ try { speechSynthesis.cancel(); const u = new SpeechSynthe
 // ---------- 分享（直接開 LINE；電腦上可複製） ----------
 const lineURL = text => 'https://line.me/R/share?text=' + encodeURIComponent(text);
 function shareSheet(text){
+  backupOpen = false;
   sheet(`<h3>分享給朋友</h3><p class="sub">下面這段話會傳給你選的 LINE 朋友或群組</p>
     <div class="todaycard" style="white-space:pre-line;font-size:1em" id="share-text">${esc(text)}</div>
     <div class="btnrow">
@@ -273,6 +287,63 @@ function eventShareText(e, d){
   const diff = Math.round((d-TODAY)/864e5);
   const when = diff===0?'今天':diff===1?'明天':(startOfWeek(d).getTime()===startOfWeek(TODAY).getTime()?'這禮拜':'下禮拜')+WD[d.getDay()];
   return `${when}（${md(d)}）${fmtTime(e.time)}，我們一起去${titleOf(e)}！${e.place?'\n地點：'+e.place:''}`;
+}
+
+// ---------- 備份與還原（v3.1） ----------
+// 備份是一段文字：上半是看得懂的行程清單，最後一行「HAOBK1:」後面是程式用的備份碼。
+// 傳到 LINE 給家人存著；還原時整段貼回來即可（只認備份碼那一行，前面的字不影響）。
+const BK_MARK = 'HAOBK1:';
+const b64enc = s => btoa(unescape(encodeURIComponent(s)));
+const b64dec = s => decodeURIComponent(escape(atob(s)));
+function eventLine(e){
+  return (e.repeat ? '每週' + WD[e.weekday] : e.date.slice(5).replace('-','/')) + ' ' + fmtTime(e.time) + ' ' + titleOf(e) + (e.place ? '，' + e.place : '');
+}
+function backupText(){
+  const data = {v:1, at: ymd(TODAY), events: S.events, settings: S.settings};
+  const list = S.events.slice().sort((a,b) => (a.repeat?0:1)-(b.repeat?0:1) || (a.weekday??0)-(b.weekday??0) || String(a.date||'').localeCompare(b.date||'') || a.time.localeCompare(b.time));
+  return `【好日子行事曆備份】${md(TODAY)}，共 ${S.events.length} 個活動\n`
+    + (list.length ? list.map(eventLine).join('\n') : '（沒有活動）')
+    + `\n換手機或行程不見時，把這整段貼到好日子「設定」→「還原行程」。\n` + BK_MARK + b64enc(JSON.stringify(data));
+}
+function parseBackup(text){
+  const i = text.indexOf(BK_MARK); if (i < 0) return null;
+  try {
+    const d = JSON.parse(b64dec(text.slice(i + BK_MARK.length).replace(/\s+/g, '')));
+    if (!d || !Array.isArray(d.events)) return null;
+    const ok = d.events.filter(e => e && TYPES[e.type] && /^\d\d:\d\d$/.test(e.time) && (e.repeat ? e.weekday >= 0 && e.weekday <= 6 : /^\d{4}-\d\d-\d\d$/.test(e.date)));
+    return {at: d.at, events: ok, settings: d.settings && typeof d.settings === 'object' ? d.settings : null};
+  } catch(e){ return null; }
+}
+let pendingRestore = null, backupOpen = false;
+// 真的按了傳送或複製，才算備份過
+function markBackup(){ if (!backupOpen) return; S.lastBackup = ymd(TODAY); store(STORE_KEY, S); if (view === 'settings') render(); }
+function backupSheet(){
+  const text = backupText();
+  backupOpen = true;
+  sheet(`<h3>備份行程</h3><p class="sub">把下面這段傳到 LINE 給家人（或傳給自己），請他們幫你留著。</p>
+    <div class="todaycard" style="white-space:pre-line;font-size:.85em;max-height:40vh;overflow:auto;word-break:break-all" id="share-text">${esc(text)}</div>
+    <div class="btnrow">
+      <a class="primary line" id="bk-line" href="${lineURL(text)}" target="_blank" rel="noopener">用 LINE 傳給家人</a>
+      ${navigator.share ? '<button class="secondary" id="share-other">用其他方式傳送</button>' : ''}
+      <button class="secondary" id="copy-share">📋 複製這段話</button>
+      <button class="secondary" id="sheet-close">關閉</button></div>`);
+}
+function restoreSheet(){
+  pendingRestore = null;
+  sheet(`<h3>還原行程</h3><p class="sub">打開 LINE，長按家人幫你存的備份 →「複製」，再回來按下面的「貼上」。</p>
+    ${navigator.clipboard && navigator.clipboard.readText ? '<button class="primary" id="rs-paste" style="margin-bottom:10px">📋 貼上剛剛複製的備份</button>' : ''}
+    <textarea class="field" id="rs-text" rows="4" placeholder="也可以長按這裡，選「貼上」" style="min-height:6em;font-size:.85em"></textarea>
+    <div id="rs-area"></div>
+    <div class="btnrow two"><button class="secondary" id="sheet-close">不要了</button><button class="primary" id="rs-check">還原</button></div>`);
+}
+function checkRestore(){
+  const r = parseBackup($('#rs-text').value);
+  const area = $('#rs-area');
+  if (!r){ area.innerHTML = `<div class="notice warn"><b>找不到備份</b><p>要貼上整段備份，最後一行是「${BK_MARK}」開頭的那段字。</p></div>`; return; }
+  pendingRestore = r;
+  const when = r.at ? r.at.slice(5).replace('-','/') + ' 的' : '';
+  area.innerHTML = `<div class="confirm"><p>找到 ${when}備份，共 ${r.events.length} 個活動。<br>還原後，手機上現在的行程會被取代。</p>
+    <div class="choices w2"><button class="choice" id="sheet-close">不要</button><button class="choice" id="rs-yes" style="background:var(--blue);color:var(--on-color);border-color:var(--blue)">確定還原</button></div></div>`;
 }
 
 // ---------- 提醒 ----------
@@ -440,6 +511,7 @@ async function initNative(){
 document.addEventListener('click', ev => {
   const t = ev.target;
   if (t.id==='ov') { closeSheet(); return; }
+  if (t.closest('#bk-line')) { markBackup(); return; }
   const b = t.closest('button'); if (!b) return;
   const id = b.id;
   if (b.dataset.view){ view = b.dataset.view; if (view==='add') draft = newDraft(); closeSheet(); render(); return; }
@@ -505,8 +577,8 @@ document.addEventListener('click', ev => {
   // 分享
   if (id==='share-week'){ shareSheet(weekShareText(weekOffset)); return; }
   if (id==='share-one'){ const e=S.events.find(x=>x.id==b.dataset.id); shareSheet(eventShareText(e, parseYmd(b.dataset.date))); return; }
-  if (id==='share-other'){ navigator.share({text:$('#share-text').textContent}).catch(()=>{}); return; }
-  if (id==='copy-share'){ const txt=$('#share-text').textContent;
+  if (id==='share-other'){ markBackup(); navigator.share({text:$('#share-text').textContent}).catch(()=>{}); return; }
+  if (id==='copy-share'){ markBackup(); const txt=$('#share-text').textContent;
     const fallback=()=>{ const r=document.createRange(); r.selectNodeContents($('#share-text')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('已選取文字，請長按複製'); };
     try { navigator.clipboard.writeText(txt).then(()=>toast('已複製！打開 LINE 貼上就可以'), fallback); } catch(err){ fallback(); } return; }
   if (id==='speak-week'){ speak(speechText); return; }
@@ -520,8 +592,19 @@ document.addEventListener('click', ev => {
   if (id==='clear-yes'){ S.events=[]; S.sample=false; save(); closeSheet(); view='week'; render(); toast('已清空，按「新增」記下第一個活動'); return; }
   if (id==='reset-ask'){ confirmSheet('換回範例行程？', '你現在的行程會被範例取代，不能復原。', 'reset-yes', '確定換回'); return; }
   if (id==='reset-yes'){ S.events=seed(); S.sample=true; save(); closeSheet(); view='week'; render(); toast('已換回範例行程'); return; }
+  // 備份與還原
+  if (id==='backup'){ backupSheet(); return; }
+  if (id==='restore'){ restoreSheet(); return; }
+  if (id==='rs-paste'){ navigator.clipboard.readText().then(t => { $('#rs-text').value = t; checkRestore(); }, () => toast('請長按下面的框，選「貼上」')); return; }
+  if (id==='rs-check'){ checkRestore(); return; }
+  if (id==='rs-yes'){ const r = pendingRestore; if (!r) return;
+    const before = {events: S.events, settings: S.settings, sample: S.sample};
+    S.events = r.events; if (r.settings) S.settings = Object.assign({}, S.settings, r.settings); S.sample = false;
+    save(); closeSheet(); view='week'; weekOffset=0; render();
+    toast(`已還原 ${r.events.length} 個活動`, '復原', () => { Object.assign(S, before); save(); render(); toast('已回到還原前的行程'); });
+    return; }
   // 設定
-  const map = {'s-sunday':'sunday','s-daybefore':'dayBefore','s-hour':'hourBefore','s-contrast':'highContrast'};
+  const map ={'s-sunday':'sunday','s-daybefore':'dayBefore','s-hour':'hourBefore','s-contrast':'highContrast'};
   if (b.dataset.fl){ S.settings.fontLevel = +b.dataset.fl; save(); render(); return; }
   if (map[id]){ S.settings[map[id]] = !S.settings[map[id]]; save(); render(); return; }
   if (b.dataset.sh){ S.settings.sundayHour = +b.dataset.sh; save(); render(); return; }

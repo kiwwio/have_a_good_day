@@ -1,6 +1,18 @@
-# 好日子行事曆 App v3.0（iOS／Android，Capacitor）
+# 好日子行事曆 App v3.1（iOS／Android，Capacitor）
 
 階段二：把網頁 App（v2.1）包成手機 App，改用**手機本機排程通知**，App 關著也會準時提醒。
+
+## v3.1 新增（2026-11-27）：保護長輩的行程不見
+
+| 功能 | 說明 |
+|---|---|
+| 請手機保留資料 | 打開時呼叫 `navigator.storage.persist()`。已安裝到桌面的網頁 App，Android Chrome 通常會同意，系統清理空間時就不會刪掉行程。同意後，設定頁底部顯示「（已請手機保留）」 |
+| 備份行程 | 「提醒」頁 →「📤 備份行程，傳給家人」。產生一段文字：上半是看得懂的行程清單，最後一行 `HAOBK1:` 後面是備份碼（行程＋設定，JSON 轉 Base64）。可用 LINE 傳送、其他方式傳送或複製。**真的按了傳送或複製**才記錄「上次備份」日期 |
+| 還原行程 | 「📥 還原行程」→ 按「貼上剛剛複製的備份」（或長按框框貼上）→ 顯示「找到 11/27 的備份，共 N 個活動」→ 確定還原。還原後提示列有「復原」可反悔 |
+| 防呆 | 只認 `HAOBK1:` 那一行，前面多了字、備份碼被 LINE 斷行都能還原；格式不對的活動會略過；找不到備份碼時顯示大字說明 |
+
+已驗證（瀏覽器，2026-11-27）：備份文字正確、按複製後顯示「上次備份：11/27」、清空後還原 6 個活動、模擬 LINE 斷行仍可還原、亂打字顯示「找不到備份」、「復原」可回到還原前；主控台無錯誤。
+手機 App 版尚未重新建置 APK（要用時執行 `tools/build-apk.ps1`，會先 `npx cap sync`）。
 
 | 項目 | 內容 |
 |---|---|
@@ -9,7 +21,7 @@
 | 網頁程式 | `www/`（與網頁版共用同一份；在手機 App 裡自動切換成原生通知） |
 | 原生專案 | `android/`（Android Studio 開）、`ios/`（Xcode 開，需 Mac） |
 | 外掛 | `@capacitor/local-notifications` |
-| 測試版安裝檔 | `have-a-good-day-v3.0-debug.apk`（可直接裝到 Android 手機測試；不能上架） |
+| 測試版安裝檔 | `have-a-good-day-v3.1-debug.apk`（可直接裝到 Android 手機測試；不能上架） |
 
 ## 和網頁版 v2.1 的差別
 
@@ -65,7 +77,7 @@
 
 | 指令（在這個資料夾執行） | 做什麼 |
 |---|---|
-| `powershell -ExecutionPolicy Bypass -File .\tools\build-apk.ps1` | 建置測試版 APK → `have-a-good-day-v3.0-debug.apk` |
+| `powershell -ExecutionPolicy Bypass -File .\tools\build-apk.ps1` | 建置測試版 APK → `have-a-good-day-v3.1-debug.apk` |
 | `powershell -ExecutionPolicy Bypass -File .\tools\run-emulator.ps1` | 開模擬器、安裝並打開 App |
 | `powershell -ExecutionPolicy Bypass -File .\tools\install-sdk.ps1` | （換電腦時）安裝 Android SDK |
 
@@ -94,6 +106,6 @@
 - [ ] 字型打包進 App（目前用 Google Fonts，沒網路時會改用手機內建字型）
 - [ ] 朗讀：Android WebView 多半不支援網頁朗讀，改用 TTS 外掛
 - [ ] 分享：改用 `@capacitor/share` 呼叫手機分享選單
-- [ ] 資料改存 `@capacitor/preferences`，避免系統清理 WebView 資料
+- [ ] 資料改存 `@capacitor/preferences`，避免系統清理 WebView 資料（v3.1 已先加備份／還原與 `storage.persist()`）
 - [ ] 通知被關掉時的「前往設定」按鈕（需外掛，目前是文字步驟）
 - [ ] 背景定期重排通知，解決 21 天沒打開的問題

@@ -1,6 +1,6 @@
 /* 好日子行事曆 — Service Worker（離線快取）
    改版時請同步修改 VERSION，舊快取會自動清除。 */
-const VERSION = 'v3.0';
+const VERSION = 'v3.1';
 const APP_CACHE = 'haorizi-app-' + VERSION;
 const FONT_CACHE = 'haorizi-fonts';
 const ASSETS = [
