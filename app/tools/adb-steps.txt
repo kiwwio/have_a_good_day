@@ -1,4 +1,4 @@
-install -r ..\have-a-good-day-v3.1-debug.apk
+install -r ..\have-a-good-day-v3.2-debug.apk
 shell am force-stop tw.edu.nycu.haveagoodday
 shell input keyevent KEYCODE_HOME
 sleep 1

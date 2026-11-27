@@ -17,6 +17,6 @@ Write-Host "=== start $avd ==="
 & $cli "--sdk=$sdk" emulator start $avd
 
 & $adb wait-for-device
-& $adb install -r "$proj\have-a-good-day-v3.1-debug.apk"
+& $adb install -r "$proj\have-a-good-day-v3.2-debug.apk"
 & $adb shell monkey -p tw.edu.nycu.haveagoodday -c android.intent.category.LAUNCHER 1
 Write-Host 'EMULATOR-READY'

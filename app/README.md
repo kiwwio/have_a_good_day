@@ -1,6 +1,10 @@
-# 好日子行事曆 App v3.1（iOS／Android，Capacitor）
+# 好日子行事曆 App v3.2（iOS／Android，Capacitor）
 
 階段二：把網頁 App（v2.1）包成手機 App，改用**手機本機排程通知**，App 關著也會準時提醒。
+
+## v3.2 修正（2026-11-27）
+
+備份文字最後的說明原本寫「貼到好日子『設定』→『還原行程』」，但畫面下方的分頁叫「提醒」，長輩會找不到。改成「打開好日子，按下面的『提醒』→『還原行程』，把這整段貼上」。備份碼格式不變，v3.1 傳出去的備份照樣可以還原。
 
 ## v3.1 新增（2026-11-27）：保護長輩的行程不見
 
@@ -21,7 +25,7 @@
 | 網頁程式 | `www/`（與網頁版共用同一份；在手機 App 裡自動切換成原生通知） |
 | 原生專案 | `android/`（Android Studio 開）、`ios/`（Xcode 開，需 Mac） |
 | 外掛 | `@capacitor/local-notifications` |
-| 測試版安裝檔 | `have-a-good-day-v3.1-debug.apk`（可直接裝到 Android 手機測試；不能上架） |
+| 測試版安裝檔 | `have-a-good-day-v3.2-debug.apk`（可直接裝到 Android 手機測試；不能上架） |
 
 ## 和網頁版 v2.1 的差別
 
@@ -77,7 +81,7 @@
 
 | 指令（在這個資料夾執行） | 做什麼 |
 |---|---|
-| `powershell -ExecutionPolicy Bypass -File .\tools\build-apk.ps1` | 建置測試版 APK → `have-a-good-day-v3.1-debug.apk` |
+| `powershell -ExecutionPolicy Bypass -File .\tools\build-apk.ps1` | 建置測試版 APK → `have-a-good-day-v3.2-debug.apk` |
 | `powershell -ExecutionPolicy Bypass -File .\tools\run-emulator.ps1` | 開模擬器、安裝並打開 App |
 | `powershell -ExecutionPolicy Bypass -File .\tools\install-sdk.ps1` | （換電腦時）安裝 Android SDK |
 

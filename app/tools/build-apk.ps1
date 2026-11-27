@@ -24,6 +24,6 @@ Set-Location "$work\android"
 if ($LASTEXITCODE -ne 0) { throw 'gradle build failed' }
 
 $apk = "$work\android\app\build\outputs\apk\debug\app-debug.apk"
-Copy-Item $apk "$proj\have-a-good-day-v3.1-debug.apk" -Force
-Get-Item "$proj\have-a-good-day-v3.1-debug.apk" | Select-Object Name, Length
+Copy-Item $apk "$proj\have-a-good-day-v3.2-debug.apk" -Force
+Get-Item "$proj\have-a-good-day-v3.2-debug.apk" | Select-Object Name, Length
 Write-Host 'BUILD-DONE'

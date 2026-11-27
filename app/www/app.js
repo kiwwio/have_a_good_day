@@ -1,9 +1,9 @@
-/* 好日子行事曆 v3.1 — 主程式（網頁 App 與 iOS／Android App 共用）
+/* 好日子行事曆 v3.2 — 主程式（網頁 App 與 iOS／Android App 共用）
    網頁版：可加到手機桌面、離線可開；提醒在打開 App 時跳出。
    手機 App 版（Capacitor）：用手機本機排程通知，App 關著也會準時提醒（見「手機本機通知」一節）。 */
 (function(){
 'use strict';
-const APP_VERSION = 'v3.1';
+const APP_VERSION = 'v3.2';
 // 在 iOS／Android App 裡執行時為 true（Capacitor 原生殼）
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const LN = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.LocalNotifications : null;
@@ -303,7 +303,7 @@ function backupText(){
   const list = S.events.slice().sort((a,b) => (a.repeat?0:1)-(b.repeat?0:1) || (a.weekday??0)-(b.weekday??0) || String(a.date||'').localeCompare(b.date||'') || a.time.localeCompare(b.time));
   return `【好日子行事曆備份】${md(TODAY)}，共 ${S.events.length} 個活動\n`
     + (list.length ? list.map(eventLine).join('\n') : '（沒有活動）')
-    + `\n換手機或行程不見時，把這整段貼到好日子「設定」→「還原行程」。\n` + BK_MARK + b64enc(JSON.stringify(data));
+    + `\n換手機或行程不見時，打開好日子，按下面的「提醒」→「還原行程」，把這整段貼上。\n` + BK_MARK + b64enc(JSON.stringify(data));
 }
 function parseBackup(text){
   const i = text.indexOf(BK_MARK); if (i < 0) return null;
